@@ -12,6 +12,10 @@ import { THEMES, PORTAL_THEMES } from './themes.js';
 import { WordTiles } from './wordtiles.js';
 import { Poem } from './poem.js';
 import { offerWords, lineText, MOODS, POS_COLORS } from './words.js';
+import { Obstacles } from './obstacles.js';
+import { Air } from './air.js';
+import { Flow } from './flow.js';
+import { Journeys, PAPERS } from './journeys.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
 import { QUALITY } from './config.js';
@@ -72,6 +76,13 @@ const bursts = new Bursts(scene);
 const feedback = new Feedback(camera);
 const wordTiles = new WordTiles(scene);
 const poem = new Poem();
+const obstacles = new Obstacles();
+const air = new Air(scene);
+const flow = new Flow();
+const journeys = new Journeys();
+world.obstacles = obstacles;
+world.air = air;
+plane.setPaper(journeys.paper);
 
 const START = new THREE.Vector3(0, 42, -190);
 
@@ -109,6 +120,8 @@ function applyWorld(s, key, keepPlace = false) {
   rings.clear();
   animals.clear();
   wordTiles.clear();
+  air.clear();
+  obstacles.clear();
   // In the poem world, words take over from most of the rings.
   const poemWorld = key === 'ethereal';
   rings.chainChance = poemWorld ? 0.1 : 0.35;
@@ -141,6 +154,12 @@ const state = {
   nextCluster: 0,
   lineFreqs: [],
   echoes: {}, // word resonances in progress: name -> seconds left
+  timeScale: 1, // < 1 during slow-motion moments
+  lastBrush: 0,
+  lastRoll: -99,
+  skim: 0,
+  seenRiver: false,
+  seenThermal: false,
   time: 0,
   hudHidden: false,
   shake: 0,
@@ -246,13 +265,14 @@ const hud = {
 const RAINBOW = ['#ff5f6d', '#ffc371', '#fff36b', '#6bff95', '#6bd6ff', '#9a6bff', '#ff6bd6'];
 const HAPTICS = { gold: 15, swift: [20, 40, 30], prism: [15, 30, 15, 30, 15], flip: 40, portal: [60, 40, 120] };
 
-function onRing({ ring, type, position }) {
+function onRing(hit) {
+  const { ring, type, position } = hit;
   const def = RING_TYPES[type];
   // Chain rings within a few seconds of each other to build a combo.
   state.combo = state.time - state.lastRing < 4.5 ? state.combo + 1 : 1;
   state.lastRing = state.time;
   const mult = Math.min(state.combo, 5);
-  const points = def.points * mult;
+  const points = def.points * mult * flow.level;
   state.score += points;
   hud.score.textContent = state.score;
   hud.counter.classList.remove('pop');
@@ -278,7 +298,12 @@ function onRing({ ring, type, position }) {
   if (type === 'swift') state.shake = Math.max(state.shake, 0.35);
   if (type === 'prism') state.rainbow = 7;
   if (type === 'flip') plane.startTrick(state.trick++ % 2 === 0 ? 'loop' : 'roll');
+  journeys.track('ring');
+  journeys.track('score', state.score);
+  bumpFlow('ring');
+  if (hit.chainDone && hit.chainLength > 2) chainComplete(position, hit.chainLength);
   if (def.portal) {
+    journeys.track('portal');
     if (ring.word) {
       // A word portal: the word becomes part of your poem, and in you go.
       catchWord(ring.word, position);
@@ -328,6 +353,8 @@ function catchWord(word, position) {
     if (text) readLine(text);
   } else {
     poem.add(word);
+    journeys.track('word');
+    bumpFlow('word');
     state.lineFreqs.push(audio.word(word.pos, poem.current.length - 1, panOf(position) * 0.6));
     audio.magnet();
     feedback.popup(position, word.w, color, true);
@@ -444,6 +471,133 @@ async function travel(target = null) {
 }
 
 // ---------------------------------------------------------------------------
+// Flow: skimming, near misses, riding the air, tricks; brushes cost you.
+
+function bumpFlow(kind, amount = 1) {
+  const up = flow.gain(kind, amount);
+  if (up) {
+    audio.levelUp(up);
+    journeys.track('flow', up);
+    feedback.popup(tmpV.copy(plane.position).addScaledVector(plane.camForward, 12).setY(plane.position.y + 3), `Flow ×${up}`, '#ffe9a8', true);
+  }
+}
+
+function tendFlow(dt, a) {
+  flow.update(dt);
+  // Skimming: low and fast over the ground or water.
+  const low = plane.groundDist < 9 && plane.speed > 16 && plane.bump === 0;
+  if (low) {
+    bumpFlow('skim', dt * (1.3 - plane.groundDist / 9));
+    journeys.track('skim', dt);
+    state.skim += dt;
+    if (Math.random() < dt * 8) puffs.emit(tmpPuff.copy(plane.position).setY(plane.position.y - plane.groundDist + 0.3), plane.groundDist < 4 && heightAt(plane.position.x, plane.position.z) < WATER_LEVEL ? waterPuff : grassPuff, 1);
+  } else state.skim = 0;
+
+  // Trees: brush through leaves, or slip past for a bonus.
+  const o = obstacles.check(plane.position, state.time);
+  if (o.brush) {
+    plane.brush();
+    flow.lose('brush');
+    state.lastBrush = state.time;
+    state.shake = Math.max(state.shake, 0.3);
+    const t = o.brush.tint;
+    const leaf = `rgb(${Math.round(Math.pow(t[0], 1 / 2.2) * 255)},${Math.round(Math.pow(t[1], 1 / 2.2) * 255)},${Math.round(Math.pow(t[2], 1 / 2.2) * 255)})`;
+    bursts.emit(plane.position, plane.camForward, [leaf, leaf, '#ffffff'], 50, 3, 6);
+    audio.brush();
+    feedback.haptic([10, 30, 10]);
+  } else if (o.near) {
+    bumpFlow('near');
+    journeys.track('near');
+    audio.nearMiss(panOf(tmpV.set(o.near.x, plane.position.y, o.near.z)));
+    feedback.popup(tmpV.set(o.near.x, Math.min(o.near.top, plane.position.y + 2), o.near.z), 'Close!', '#ffffff');
+    feedback.haptic(8);
+  }
+  journeys.track('clean', state.time - state.lastBrush);
+
+  // Riding the air.
+  if (a.thermal > 0.8) {
+    bumpFlow('thermal', dt);
+    if (plane.vario > 0) journeys.track('thermal', plane.vario * dt);
+    if (!state.seenThermal) {
+      state.seenThermal = true;
+      showToast('Thermal! Circle inside the rising air to climb');
+    }
+  }
+  if (a.ridge > 1) bumpFlow('ridge', dt);
+  if (plane.inRiver) {
+    bumpFlow('river', dt);
+    journeys.track('river', dt);
+    if (!state.seenRiver) {
+      state.seenRiver = true;
+      showToast('Wind river! Fly with the current and it carries you');
+    }
+  }
+  updateFlowHud();
+}
+
+function chainComplete(position, length) {
+  bumpFlow('chain');
+  journeys.track('chain');
+  state.timeScale = 0.3; // a breath of slow motion
+  audio.chainComplete(length);
+  feedback.popup(tmpV.copy(position).setY(position.y + 5), `Chain complete!`, '#fff4c2', true);
+  bursts.emit(position, plane.camForward, ['#fff4c2', '#ffd27a', '#ffffff'], 160, 8, 18);
+  feedback.flash('#fff4c2', 0.35);
+}
+
+function doRoll(dir) {
+  if (state.mode !== 'flying' || !plane.startTrick('roll', dir)) return;
+  audio.roll(dir);
+  journeys.track('roll');
+  if (state.time - state.lastRoll > 1.8) bumpFlow('roll');
+  state.lastRoll = state.time;
+}
+
+const flowHud = { el: $('flow'), fill: $('flow-fill'), level: $('flow-level'), vario: $('vario') };
+function updateFlowHud() {
+  flowHud.fill.style.transform = `scaleX(${flow.value / 5})`;
+  flowHud.level.textContent = `×${flow.level}`;
+  flowHud.el.dataset.level = flow.level;
+  const v = plane.lift;
+  flowHud.vario.textContent = v > 0.6 ? `↑ ${v.toFixed(1)} m/s` : plane.inRiver ? '≋ wind river' : state.skim > 0.4 ? '⌁ skimming' : '';
+}
+
+// Journeys: finished goals earn stamps; stamps unlock paper.
+journeys.onComplete((done, paper) => {
+  audio.stamp();
+  showToast(`✓ ${done.label} · +${done.stamps} stamp${done.stamps > 1 ? 's' : ''}`);
+  renderJourneys();
+  if (paper) setTimeout(() => showToast(`New paper unlocked: ${paper.name}! Choose it in the pause menu`), 3800);
+});
+
+function renderJourneys() {
+  const list = journeys.active
+    .map((a) => {
+      const pct = Math.min(100, Math.round((a.progress / a.goal) * 100));
+      return `<li><span>${journeys.label(a)}</span><i style="--p:${pct}%"></i></li>`;
+    })
+    .join('');
+  for (const id of ['journeys-hud', 'journeys-menu']) {
+    const el = $(id);
+    if (el) el.innerHTML = list;
+  }
+  $('stamps').textContent = journeys.stamps;
+  const unlocked = new Set(journeys.unlocked().map((p) => p.id));
+  $('papers').innerHTML = PAPERS.map(
+    (p) =>
+      `<button data-paper="${p.id}" class="${p.id === journeys.paper ? 'on' : ''}" ${unlocked.has(p.id) ? '' : 'disabled'}>${p.name}${unlocked.has(p.id) ? '' : ` · ${p.stamps}✦`}</button>`,
+  ).join('');
+}
+$('papers').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-paper]');
+  if (!b || b.disabled) return;
+  journeys.setPaper(b.dataset.paper);
+  plane.setPaper(journeys.paper);
+  renderJourneys();
+});
+setInterval(() => state.mode === 'flying' && renderJourneys(), 1000);
+
+// ---------------------------------------------------------------------------
 // Animals
 
 // Now and then a nearby animal calls out, placed where it is.
@@ -472,6 +626,7 @@ function updatePaws() {
 function onDiscover(a) {
   const sp = SPECIES[a.kind];
   audio.discover(panOf(a.group.position) * 0.6);
+  journeys.track('animal');
   feedback.haptic([20, 60, 20]);
   feedback.popup(a.group.position, `${sp.emoji} ${sp.name}!`, '#ffe9a8', true);
   showToast(`New animal: ${sp.emoji} ${sp.name} · ${animals.discovered.size}/${SPECIES_KEYS.length} found`);
@@ -537,7 +692,9 @@ function frame(now) {
   // two, which otherwise shows up as micro-stutter in the chase camera.
   const raw = Math.min(timer.getDelta(), 1 / 20);
   smoothDt += (raw - smoothDt) * (Math.abs(raw - smoothDt) > 0.01 ? 1 : 0.2);
-  const dt = smoothDt;
+  // Slow-motion moments ease back to real time.
+  state.timeScale += (1 - state.timeScale) * Math.min(1, smoothDt * 1.6);
+  const dt = smoothDt * state.timeScale;
   if (state.mode === 'paused' || state.mode === 'loading') {
     renderer.render(scene, camera);
     return;
@@ -546,12 +703,16 @@ function frame(now) {
 
   input.update(dt);
   const controls = state.mode === 'flying' ? input : autopilot();
-  plane.update(dt, controls);
+  const airHere = air.update(dt, plane, scene);
+  plane.cruiseBonus = state.mode === 'flying' ? flow.cruiseBonus : 0;
+  plane.update(dt, controls, airHere);
+  if (state.mode === 'flying') tendFlow(dt, airHere);
 
   if (plane.bump > 0) {
     puffs.emit(tmpPuff.copy(plane.position).setY(plane.position.y - 2), plane.splash ? waterPuff : grassPuff, 2);
     if (plane.bump > 0.4 && state.shake < 0.05) {
       state.shake = 0.25;
+      if (state.mode === 'flying') flow.lose('bump');
       audio.thump(plane.splash ? 'water' : 'grass');
     }
   }
@@ -599,7 +760,7 @@ function frame(now) {
   const trailK = Math.max(0.25 + speedK * 0.75, TRAIL_RAINBOW.value);
   trails[0].update(plane.leftTip, plane.up, trailK);
   trails[1].update(plane.rightTip, plane.up, trailK);
-  streaks.update(dt, plane, 0.3 + speedK + plane.gustFraction);
+  streaks.update(dt, plane, 0.3 + speedK + plane.gustFraction + flow.value * 0.15 + (plane.inRiver ? 1 : 0));
   motes.update(dt, plane.position);
   puffs.update(dt);
   birds.update(dt, state.time, plane, heightAt);
@@ -614,8 +775,9 @@ function frame(now) {
     altitude: plane.position.y,
     groundDist: plane.groundDist,
     overWater: groundHere < WATER_LEVEL,
-    combo: state.time - state.lastRing < 4.5 ? state.combo : 0,
+    combo: Math.max(state.time - state.lastRing < 4.5 ? state.combo : 0, flow.value),
   });
+  audio.air(plane.lift, plane.inRiver);
   if (controls.boost && !state.wasBoosting) audio.gust();
   state.wasBoosting = controls.boost;
   animalCalls(dt);
@@ -670,6 +832,7 @@ function start() {
   setTimeout(() => $('title').classList.add('hidden'), 1300);
   $('hud').classList.remove('hidden');
   updatePaws();
+  renderJourneys();
 }
 
 let toastTimer = 0;
@@ -686,6 +849,7 @@ function togglePause() {
     state.mode = 'paused';
     audio.paper();
     renderJournal();
+    renderJourneys();
     $('paused').classList.remove('hidden');
     setTimeout(() => state.mode === 'paused' && audio.ctx?.suspend(), 400);
   } else if (state.mode === 'paused') {
@@ -697,6 +861,7 @@ function togglePause() {
 }
 
 $('start').addEventListener('click', start);
+input.onDoubleTap = (side) => doRoll(side);
 // Soft click on every button.
 document.addEventListener('click', (e) => {
   if (e.target.closest('button')) audio.click();
@@ -785,6 +950,8 @@ window.addEventListener('keydown', (e) => {
     poem.undo();
     updatePoemUi();
   }
+  if (e.code === 'KeyQ') doRoll(-1);
+  if (e.code === 'KeyE') doRoll(1);
   if (e.code === 'KeyO') ($('poem-view').classList.contains('hidden') ? openPoem() : closePoem());
   if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
   if (e.code === 'KeyM') audio.setMuted(!audio.muted);
@@ -840,7 +1007,7 @@ async function boot() {
 }
 
 requestAnimationFrame(frame);
-window.__paperplanes = { state, renderer, plane, world, camera, foliage, input, chaseCamera, rings, animals, onRing, travel, wordTiles, poem, catchWord, tendWords };
+window.__paperplanes = { flow, air, obstacles, journeys, doRoll, tendFlow, state, renderer, plane, world, camera, foliage, input, chaseCamera, rings, animals, onRing, travel, wordTiles, poem, catchWord, tendWords };
 boot().catch((err) => {
   console.error(err);
   document.querySelector('#loading .hint').textContent = 'Something went wrong loading the scene. Check the console.';

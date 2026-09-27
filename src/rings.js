@@ -232,7 +232,9 @@ export class Rings {
     this.collected = new Set();
     this._tmp = new THREE.Vector3();
     this.time = 0;
-    this.chainChance = 0.35; // lower in the poem world, where words take over
+    this.chainChance = 0.35;
+    this.chainTotals = new Map(); // chain id -> ring count
+    this.chainHits = new Map(); // lower in the poem world, where words take over
     this.wordGates = true; // some portals carry a word into the poem world
   }
 
@@ -271,6 +273,8 @@ export class Rings {
         types = Array.from({ length: n }, () => this._pickType(r));
       }
       const path = planChain(r, x, z, yaw, types, startAlt);
+      const chainId = `${cx},${cz},${c}`;
+      if (!this.chainTotals.has(chainId)) this.chainTotals.set(chainId, path.length);
       path.forEach((p, i) => {
         const id = `${cx},${cz},${c},${i}`;
         if (this.collected.has(id)) return;
@@ -342,6 +346,8 @@ export class Rings {
   clear() {
     for (const ring of [...this.active]) this._remove(ring);
     this.collected.clear();
+    this.chainTotals.clear();
+    this.chainHits.clear();
   }
 
   removeChunk(list) {
@@ -407,7 +413,15 @@ export class Rings {
       if (Math.abs(along) < 2.5 && radial < ring.radius + 0.5) {
         ring.dying = 0.0001;
         this.collected.add(ring.id);
-        hits.push({ ring, type: this.effectiveType(ring), position: m.position.clone() });
+        // Threading every ring of a chain completes it.
+        const chainId = ring.id.split(',').slice(0, 3).join(',');
+        let chainDone = false;
+        if (this.chainTotals.has(chainId)) {
+          const n = (this.chainHits.get(chainId) ?? 0) + 1;
+          this.chainHits.set(chainId, n);
+          chainDone = n === this.chainTotals.get(chainId);
+        }
+        hits.push({ ring, type: this.effectiveType(ring), position: m.position.clone(), chainDone, chainLength: this.chainTotals.get(chainId) });
       }
     }
     return hits;

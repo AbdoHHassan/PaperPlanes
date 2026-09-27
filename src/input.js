@@ -25,6 +25,8 @@ export class Input {
     this.touch = null;
     this.touches = 0;
     this.mouseBoost = false;
+    this.onDoubleTap = null; // (side: -1 left | 1 right) => void
+    this.lastTap = { t: 0, side: 0 };
 
     this.gyro = {
       supported: typeof window.DeviceOrientationEvent !== 'undefined' && matchMedia('(pointer: coarse)').matches,
@@ -50,6 +52,7 @@ export class Input {
       this.pointer.active = true;
     });
     el.addEventListener('mouseleave', () => (this.pointer.active = false));
+    el.addEventListener('dblclick', (e) => this.onDoubleTap?.(e.clientX < window.innerWidth / 2 ? -1 : 1));
     el.addEventListener('mousedown', (e) => e.button === 0 && (this.mouseBoost = true));
     window.addEventListener('mouseup', () => (this.mouseBoost = false));
 
@@ -59,6 +62,13 @@ export class Input {
       (e) => {
         e.preventDefault();
         const t = e.changedTouches[0];
+        // Double-tap on the left or right half: barrel roll that way.
+        const side = t.clientX < window.innerWidth / 2 ? -1 : 1;
+        const now = performance.now();
+        if (now - this.lastTap.t < 300 && side === this.lastTap.side) {
+          this.onDoubleTap?.(side);
+          this.lastTap.t = 0;
+        } else this.lastTap = { t: now, side };
         if (!this.touch) this.touch = { id: t.identifier, x0: t.clientX, y0: t.clientY, x: t.clientX, y: t.clientY };
         this.touches = e.touches.length;
       },
