@@ -6,6 +6,7 @@
   "scripts": {
     "assets": "node scripts/build-assets.mjs",
     "dev": "vite",
+    "dev:phone": "vite --mode phone",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -16,6 +17,7 @@
     "@gltf-transform/core": "^4.5.0",
     "@gltf-transform/extensions": "^4.5.0",
     "@gltf-transform/functions": "^4.5.0",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
     "meshoptimizer": "^1.3.0",
     "sharp": "^0.35.5",
     "vite": "^8.3.1"

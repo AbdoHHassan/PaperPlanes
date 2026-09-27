@@ -12,8 +12,12 @@ Nature models are the Stylized Nature MegaKit by [Quaternius](https://quaternius
 ```bash
 npm install
 npm run dev      # http://localhost:5173
+npm run dev:phone  # HTTPS on your local network, to try tilt steering on a phone
 npm run build    # static site in dist/
 ```
+
+Phones only allow motion sensors on HTTPS pages. With `dev:phone`, open the
+`https://192.168…` address it prints and accept the self-signed certificate warning.
 
 ## Controls
 
