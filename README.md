@@ -28,6 +28,33 @@ leaping koi on lakes, and eagles circling the peaks. Fly close to one to add it
 to your field journal (in the pause menu). The paw counter glows when an
 undiscovered animal is nearby, and the journal is remembered between visits.
 
+## Writing a poem in flight
+
+Half of all portals carry a word magnet. Fly through one and the word becomes
+the first of your poem as you enter **Dreaming Hours**, a pearl-and-lavender
+world where small clusters of word magnets drift ahead of you. You can also go
+straight there with **✎ Write a poem** on the title screen (or `?world=ethereal`).
+
+- Steer through a word to catch it; it snaps onto the magnet strip. The words
+  you didn't choose drift away, and a fresh handful appears on the horizon.
+- Each cluster leans on what came before (after *the*, adjectives and nouns
+  are likely), shares a slowly drifting mood (water, fire, body, home, sky,
+  time, love, earth, signal), and always includes one wild card. Suffix tiles
+  (*-s*, *-ing*, *-ed*, *-ly*) glue onto the word before, like real magnets.
+- Fly through **↵** (or press Enter) to end a line: it's read back to you
+  with the notes of its words.
+- Some words echo into the world: *moon* raises a moon, *rain* and *river*
+  bring sparkle rain, *fire* sends up embers, *bloom* scatters petals, *wings*
+  calls the birds, *midnight* wakes the stars, *honey* turns the air gold.
+- **✎ poem** (or `O`) opens the fridge door: undo (also Backspace), new line,
+  share/copy, save as an image, or keep the poem and start another.
+
+The vocabulary takes its cues from the themes and diction of James Baldwin
+and Mumtaza Mehri (love as a fierce force, fire and water, witness, mercy,
+home; tongue and salt, sugar and gold, archives, satellites and static,
+grandmothers and moons), but it's only single words. The poems belong to
+whoever flies them.
+
 ## Running it
 
 ```bash
@@ -70,5 +97,8 @@ Add `?low` or `?high` to the URL to force a quality tier (touch devices default 
 | `scripts/ring-flight-test.cjs` | Simulated pilot that flies every chain with the real flight model and reports the hit rate; use it when tuning ring layout or handling. |
 | `src/fx.js` | Ring feedback: spark bursts, floating labels, screen flash, haptics. |
 | `src/animals.js` | Procedural low-poly animals: habitats, behaviours (grazing, fleeing, hopping, swimming, leaping, soaring) and discovery. |
-| `src/themes.js` | The five world themes: sky, light, fog, terrain and foliage palettes, and ambient particles. |
+| `src/themes.js` | The six world themes (including the Dreaming Hours poem world): sky, light, fog, terrain and foliage palettes, and ambient particles. |
+| `src/words.js` | The word-magnet vocabulary (by part of speech and mood) and the grammar lean that picks each cluster. |
+| `src/wordtiles.js` | 3D word magnets: canvas-drawn tiles that face you, drift, and get caught. |
+| `src/poem.js` | The poem: magnet strip, fridge-door view, saving, sharing and image export. |
 | `src/audio.js` | Synthesised wind, a slow ambient pad and pentatonic chimes via WebAudio. No audio files are used. |

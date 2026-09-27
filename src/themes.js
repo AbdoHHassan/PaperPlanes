@@ -126,6 +126,35 @@ export const THEMES = {
       autumnBias: 0,
     },
   },
+
+  // The poetry world: pearl and lavender, pale iridescent trees, motes that
+  // drift upwards, and a few stars awake in the daylight.
+  ethereal: {
+    name: 'Dreaming Hours',
+    sky: { top: '#a898e0', horizon: '#fde4d8', bottom: '#e6f3ef', stars: 0.45 },
+    sun: { color: '#fff1e6', intensity: 1.9, dir: [-0.35, 0.5, 0.8] },
+    hemi: { sky: '#f3e8ff', ground: '#cde6df', intensity: 1.7 },
+    fog: { near: 0.14, far: 0.85 },
+    water: '#c3e4f0',
+    clouds: { color: '#ffffff', emissive: '#f4e4ff' },
+    motes: { color: '#fff4d6', size: 0.6, fall: -0.7, glow: true },
+    exposure: 1.02,
+    ground: {
+      sand: '#f3e9dc', wetSand: '#dcd0c4', grassA: '#e8e1f6', grassB: '#dbecef', meadowGold: '#f6e6d4',
+      autumnA: '#f4d5e4', autumnB: '#e3cdf0', forestFloor: '#d3e5e1', rock: '#c9c2da', rockDark: '#b2adc6',
+      snow: '#ffffff', snowLine: 150,
+    },
+    leaves: {
+      summer: ['#f4eeff', '#e4f6f1', '#fdeef5'],
+      autumn: ['#f7c9dc', '#d7c7f6', '#c6ecf0', '#ffe2c2'],
+      pine: ['#a3cdc4', '#b6d8d1', '#94bccb'],
+      grass: ['#e8e0f7', '#d9eef0', '#f5e5ee'],
+      grassAutumn: ['#f1d9e7'],
+      autumnBias: 0.4,
+    },
+  },
 };
 
 export const THEME_ORDER = Object.keys(THEMES);
+/** Worlds an ordinary portal can take you to (the poem world has its own). */
+export const PORTAL_THEMES = THEME_ORDER.filter((k) => k !== 'ethereal');
