@@ -101,4 +101,4 @@ Add `?low` or `?high` to the URL to force a quality tier (touch devices default 
 | `src/words.js` | The word-magnet vocabulary (by part of speech and mood) and the grammar lean that picks each cluster. |
 | `src/wordtiles.js` | 3D word magnets: canvas-drawn tiles that face you, drift, and get caught. |
 | `src/poem.js` | The poem: magnet strip, fridge-door view, saving, sharing and image export. |
-| `src/audio.js` | Synthesised wind, a slow ambient pad and pentatonic chimes via WebAudio. No audio files are used. |
+| `src/audio.js` | All sound, synthesised with WebAudio (no audio files): a generative score per world (key, mode, tempo, pad and melody voices on a look-ahead beat scheduler, with a rhythm layer that swells with gusts and combos); ring, word and discovery sounds pitched to the current chord; wind panned with your bank, paper flutter, ground rush, water; birdsong, crickets, wind chimes and animal calls; a generated reverb, music/effects buses, compressor and limiter. Music and Sounds sliders live in the pause menu. |
