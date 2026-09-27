@@ -102,26 +102,80 @@ export class Audio {
     this.windFilter.frequency.setTargetAtTime(250 + k * 900, t, 0.3);
   }
 
-  chime() {
-    if (!this.ctx) return;
+  _tone(f, t, { type = 'sine', vol = 0.15, attack = 0.01, decay = 1.6, glideTo = 0, echo = true } = {}) {
     const ctx = this.ctx;
-    const scale = [587.33, 659.25, 739.99, 880.0, 987.77, 1174.66, 1318.51];
-    const f = scale[this.note++ % scale.length];
-    const t = ctx.currentTime;
-    for (const [mult, type, vol] of [[1, 'sine', 0.18], [2, 'triangle', 0.05], [3.01, 'sine', 0.025]]) {
-      const o = ctx.createOscillator();
-      o.type = type;
-      o.frequency.value = f * mult;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(vol, t + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
-      o.connect(g);
-      g.connect(this.master);
-      g.connect(this.echo);
-      o.start(t);
-      o.stop(t + 2);
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.setValueAtTime(f, t);
+    if (glideTo) o.frequency.exponentialRampToValueAtTime(glideTo, t + decay * 0.6);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+    o.connect(g);
+    g.connect(this.master);
+    if (echo) g.connect(this.echo);
+    o.start(t);
+    o.stop(t + decay + 0.1);
+  }
+
+  _noiseSweep(t, from, to, dur, vol) {
+    const ctx = this.ctx;
+    const len = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.Q.value = 1.5;
+    f.frequency.setValueAtTime(from, t);
+    f.frequency.exponentialRampToValueAtTime(to, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + dur * 0.3);
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    src.connect(f).connect(g).connect(this.master);
+    src.start(t);
+  }
+
+  /** Ring sounds. `combo` nudges the pitch up the scale as chains build. */
+  ring(type, combo = 1) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const scale = [587.33, 659.25, 739.99, 880.0, 987.77, 1174.66, 1318.51, 1479.98];
+    const f = scale[Math.min(scale.length - 1, (combo - 1) % 8)];
+    switch (type) {
+      case 'swift':
+        this._noiseSweep(t, 400, 3000, 0.6, 0.25);
+        this._tone(f, t, { vol: 0.12, glideTo: f * 2, decay: 0.9 });
+        break;
+      case 'prism':
+        [1, 1.25, 1.5, 2, 2.5].forEach((m, i) => this._tone(f * m, t + i * 0.07, { vol: 0.1, decay: 1.4 }));
+        break;
+      case 'flip':
+        this._tone(f * 0.75, t, { type: 'triangle', vol: 0.12, glideTo: f * 1.5, decay: 0.7 });
+        this._tone(f * 1.5, t + 0.35, { vol: 0.08, glideTo: f * 0.75, decay: 0.8 });
+        break;
+      case 'portal':
+        for (let i = 0; i < 6; i++) this._tone(220 * (1 + i * 0.5), t + i * 0.05, { vol: 0.07, decay: 2.4, glideTo: 440 * (1 + i * 0.5) });
+        this._noiseSweep(t, 200, 5000, 1.2, 0.18);
+        break;
+      default:
+        this._tone(f, t, { vol: 0.18, decay: 1.8 });
+        this._tone(f * 2, t, { type: 'triangle', vol: 0.05, decay: 1.2 });
     }
+  }
+
+  chime() {
+    this.ring('gold');
+  }
+
+  discover() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => this._tone(f, t + i * 0.12, { type: 'triangle', vol: 0.09, decay: 1.2 }));
   }
 
   thump() {

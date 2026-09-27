@@ -44,12 +44,12 @@ export class World {
     }
   }
 
-  setSeed(seed) {
+  setWorld(seed, theme) {
     for (const ch of [...this.chunks.values()]) this._unload(ch);
     this.jobs = [];
     this.applyQueue = [];
     this._center = { x: NaN, z: NaN };
-    for (const w of this.workers) w.postMessage({ type: 'seed', seed });
+    for (const w of this.workers) w.postMessage({ type: 'seed', seed, theme });
   }
 
   get busy() {
@@ -113,6 +113,7 @@ export class World {
           jobs.push({ d: d + 0.4, ch, kind: 'details' });
         } else if (!ch.wantDetails && ch.detailsState !== 'none') this._despawn(ch, 'details');
         if (ring <= 3 && !ch.rings) ch.rings = this.rings.spawnForChunk(ch.cx, ch.cz);
+        if (ring <= 2 && this.animals && !ch.animals) ch.animals = this.animals.spawnForChunk(ch.cx, ch.cz);
       }
     }
     for (const [k, ch] of this.chunks) if (!wanted.has(k)) this._unload(ch);
@@ -214,6 +215,7 @@ export class World {
     this._despawn(ch, 'trees');
     this._despawn(ch, 'details');
     if (ch.rings) this.rings.removeChunk(ch.rings);
+    if (ch.animals) this.animals.removeChunk(ch.animals);
     this.chunks.delete(ch.key);
     ch.dead = true;
   }

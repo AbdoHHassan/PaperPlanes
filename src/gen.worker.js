@@ -1,11 +1,12 @@
 // Generation worker: builds terrain tiles and vegetation scatter off the main
 // thread and hands the typed arrays back without copying.
-import { setSeed, buildTerrainArrays } from './terrain.js';
+import { setSeed, setTheme, buildTerrainArrays } from './terrain.js';
 import { scatterTrees, scatterDetails, CHUNK } from './scatter.js';
 
 self.onmessage = ({ data: job }) => {
   if (job.type === 'seed') {
     setSeed(job.seed);
+    setTheme(job.theme);
     return;
   }
   const { id, cx, cz } = job;

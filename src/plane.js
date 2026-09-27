@@ -101,7 +101,13 @@ export class PaperPlane {
     this.pitch = 0; // positive = nose up
     this.roll = 0; // positive = right wing down
     this.speed = CRUISE;
-    this.boost = 0; // decays over time, adds to speed
+    this.boost = 0; // held-boost energy, decays over time
+    this.gust = 0; // ring gust: seconds remaining
+    this.gustStrength = 0;
+    this.gustTotal = 1;
+    this.trick = null; // { type: 'loop' | 'roll', t, dur }
+    this.camPitch = 0; // pitch the chase camera follows (ignores tricks)
+    this.camForward = new THREE.Vector3(0, 0, 1);
     this.groundDist = 100;
     this.bump = 0; // set when we scrape the ground/water
     this.splash = false;
@@ -125,6 +131,23 @@ export class PaperPlane {
     this.boost = Math.min(this.boost + v, 30);
   }
 
+  /** A short burst of speed that fades out after `seconds`. */
+  gustFor(seconds, strength) {
+    this.gust = Math.max(this.gust, seconds);
+    this.gustTotal = this.gust;
+    this.gustStrength = Math.max(strength, this.gust > 0 ? this.gustStrength * 0.5 : 0);
+    this.speed = Math.min(MAX_SPEED, this.speed + strength * 0.2);
+  }
+
+  get gustFraction() {
+    return this.gust > 0 ? this.gust / this.gustTotal : 0;
+  }
+
+  startTrick(type) {
+    if (this.trick) return;
+    this.trick = { type, t: 0, dur: type === 'loop' ? 2.1 : 0.9, basePitch: this.pitch };
+  }
+
   /** input: { x: -1..1 (right +), y: -1..1 (up +), boost: bool } */
   update(dt, input) {
     this.time += dt;
@@ -134,6 +157,14 @@ export class PaperPlane {
     const targetRoll = input.x * 1.05;
     this.roll += (targetRoll - this.roll) * k(2.6);
     this.yaw -= Math.sin(this.roll) * 0.8 * dt * (0.6 + 0.4 * Math.min(1, this.speed / CRUISE));
+
+    // Ring gusts: strong at first, easing out as the timer runs down.
+    let gustAccel = 0;
+    if (this.gust > 0) {
+      this.gust = Math.max(0, this.gust - dt);
+      const f = this.gust / this.gustTotal;
+      gustAccel = this.gustStrength * Math.min(1, f * 2.5);
+    }
 
     let targetPitch = input.y * 0.85 - 0.04;
     if (this.speed < MIN_SPEED + 4) targetPitch = Math.min(targetPitch, -0.2); // stall: nose drops
@@ -145,11 +176,30 @@ export class PaperPlane {
     accel += (CRUISE - this.speed) * 0.3;
     if (input.boost) this.addBoost(dt * 20);
     this.boost *= Math.exp(-dt * 0.9);
-    this.speed += (accel + this.boost * 0.5) * dt;
-    this.speed = THREE.MathUtils.clamp(this.speed, MIN_SPEED, MAX_SPEED);
+    this.speed += (accel + this.boost * 0.5 + gustAccel) * dt;
+    this.speed = THREE.MathUtils.clamp(this.speed, MIN_SPEED, MAX_SPEED + (this.gust > 0 ? 15 : 0));
 
-    const cp = Math.cos(this.pitch);
-    this.forward.set(Math.sin(this.yaw) * cp, Math.sin(this.pitch), Math.cos(this.yaw) * cp);
+    // Tricks: a loop-the-loop really flies the loop; a barrel roll is a spin.
+    let flightPitch = this.pitch;
+    let trickRoll = 0;
+    if (this.trick) {
+      const tr = this.trick;
+      tr.t += dt / tr.dur;
+      const e = tr.t < 1 ? 0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, tr.t)) : 1;
+      if (tr.type === 'loop') {
+        flightPitch = this.pitch + e * Math.PI * 2;
+        this.speed = Math.max(this.speed, CRUISE);
+      } else {
+        trickRoll = e * Math.PI * 2;
+      }
+      if (tr.t >= 1) this.trick = null;
+    }
+    this.camPitch = this.pitch;
+    const ccp = Math.cos(this.pitch);
+    this.camForward.set(Math.sin(this.yaw) * ccp, Math.sin(this.pitch), Math.cos(this.yaw) * ccp);
+
+    const cp = Math.cos(flightPitch);
+    this.forward.set(Math.sin(this.yaw) * cp, Math.sin(flightPitch), Math.cos(this.yaw) * cp);
     this.velocity.copy(this.forward).multiplyScalar(this.speed);
     this.position.addScaledVector(this.velocity, dt);
 
@@ -169,9 +219,9 @@ export class PaperPlane {
     // Visual orientation with a little paper flutter.
     const flutter = 0.02 + Math.min(0.04, (this.speed - CRUISE) * 0.001);
     this._e.set(
-      -this.pitch + Math.sin(this.time * 13.1) * flutter * 0.4,
+      -flightPitch + Math.sin(this.time * 13.1) * flutter * 0.4,
       this.yaw + Math.sin(this.time * 3.7) * flutter * 0.3,
-      this.roll + Math.sin(this.time * 17.3) * flutter,
+      this.roll + trickRoll + Math.sin(this.time * 17.3) * flutter,
     );
     this.mesh.position.copy(this.position);
     this.mesh.quaternion.setFromEuler(this._e);

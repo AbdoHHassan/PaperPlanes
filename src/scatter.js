@@ -1,6 +1,6 @@
 // Deterministic placement of trees, rocks and ground cover for one chunk.
 // Pure JS (no three.js) so it runs inside the generation workers.
-import { heightAt, slopeAt, forestAt, autumnAt, hexToLinear, getSeed, WATER_LEVEL } from './terrain.js';
+import { heightAt, slopeAt, forestAt, autumnAt, hexToLinear, getSeed, getTheme, WATER_LEVEL } from './terrain.js';
 import { mulberry32, hash2, smoothstep } from './noise.js';
 
 export const CHUNK = 160;
@@ -19,12 +19,22 @@ export const MODEL_NAMES = [
 const ID = Object.fromEntries(MODEL_NAMES.map((n, i) => [n, i]));
 
 const pal = (list) => list.map(hexToLinear);
-const LEAF_SUMMER = pal(['#7cc444', '#8fd14f', '#69b33b', '#a3d95a']);
-const LEAF_AUTUMN = pal(['#f2a93b', '#ee7f2d', '#e2512a', '#f5c542', '#d9632b']);
-const PINE = pal(['#4f9a4a', '#5aa650', '#3f8a45']);
-const GRASS_TINT = pal(['#9ad65a', '#b4df62', '#86c94a']);
-const GRASS_AUTUMN = pal(['#e3b04b', '#dd8a3a', '#c9c35a']);
+let LEAF_SUMMER, LEAF_AUTUMN, PINE, GRASS_TINT, GRASS_AUTUMN, AUTUMN_BIAS;
+let paletteFor = null;
+// Tint palettes follow the current world theme.
+function refreshPalette() {
+  const t = getTheme();
+  if (paletteFor === t) return;
+  paletteFor = t;
+  LEAF_SUMMER = pal(t.leaves.summer);
+  LEAF_AUTUMN = pal(t.leaves.autumn);
+  PINE = pal(t.leaves.pine);
+  GRASS_TINT = pal(t.leaves.grass);
+  GRASS_AUTUMN = pal(t.leaves.grassAutumn);
+  AUTUMN_BIAS = t.leaves.autumnBias;
+}
 const WHITE = [1, 1, 1];
+const autumnish = (x, z) => Math.min(1, autumnAt(x, z) + AUTUMN_BIAS);
 
 const pick = (arr, r) => arr[Math.floor(r() * arr.length) % arr.length];
 
@@ -42,6 +52,7 @@ function writer() {
 }
 
 export function scatterTrees(cx, cz, cell) {
+  refreshPalette();
   const r = mulberry32(hash2(cx, cz, 1 + getSeed() * 31));
   const w = writer();
   const n = Math.ceil(CHUNK / cell);
@@ -58,7 +69,7 @@ export function scatterTrees(cx, cz, cell) {
       const treeLine = 1 - smoothstep(150, 180, h);
       const density = (0.03 + forest * 0.75) * treeLine * (1 - smoothstep(0.6, 1.0, slope));
       if (roll < density) {
-        const autumn = autumnAt(x, z);
+        const autumn = autumnish(x, z);
         if (r() < 0.15 + alpine * 0.8) {
           w.push(pick(TREES_PINE, r), x, h - 0.4, z, r() * 6.283, 2.3 + r() * 1.4, pick(PINE, r));
         } else {
@@ -73,7 +84,7 @@ export function scatterTrees(cx, cz, cell) {
           const rs = 1.5 + r() * 3 + s * 1.5;
           w.push(pick(ROCKS, r), x, h - 0.3 * rs - slope * 1.5, z, r() * 6.283, rs, WHITE);
         } else if (h < 120) {
-          const tint = r() < autumnAt(x, z) ? pick(LEAF_AUTUMN, r) : pick(LEAF_SUMMER, r);
+          const tint = r() < autumnish(x, z) ? pick(LEAF_AUTUMN, r) : pick(LEAF_SUMMER, r);
           w.push(pick(BUSHES, r), x, h - 0.4, z, r() * 6.283, 2 + r() * 1.5, tint);
         }
       }
@@ -83,6 +94,7 @@ export function scatterTrees(cx, cz, cell) {
 }
 
 export function scatterDetails(cx, cz, cell = 7) {
+  refreshPalette();
   const r = mulberry32(hash2(cx, cz, 2 + getSeed() * 31));
   const w = writer();
   const n = Math.ceil(CHUNK / cell);
@@ -95,7 +107,7 @@ export function scatterDetails(cx, cz, cell = 7) {
       const h = heightAt(x, z);
       if (h < WATER_LEVEL + 1.2 || h > 140) continue;
       const forest = forestAt(x, z);
-      const autumn = autumnAt(x, z);
+      const autumn = autumnish(x, z);
       const k = r();
       const rot = r() * 6.283;
       const s = 1.6 + r() * 1.2;

@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 
+// Shared by both wingtip trails; > 0 turns them rainbow (after a Prism ring).
+export const TRAIL_RAINBOW = { value: 0 };
+export const TRAIL_TIME = { value: 0 };
+
 /** Fading ribbon that follows a point (used for the wingtip vapour trails). */
 export class Trail {
   constructor(scene, length = 60, width = 0.08) {
@@ -26,11 +30,15 @@ export class Trail {
         transparent: true,
         depthWrite: false,
         side: THREE.DoubleSide,
-        uniforms: { uOpacity: { value: 0.5 } },
+        uniforms: { uOpacity: { value: 0.5 }, uRainbow: TRAIL_RAINBOW, uTime: TRAIL_TIME },
         vertexShader: `attribute float alpha; varying float vA;
           void main(){ vA = alpha; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-        fragmentShader: `uniform float uOpacity; varying float vA;
-          void main(){ gl_FragColor = vec4(1.0, 1.0, 1.0, vA * uOpacity); }`,
+        fragmentShader: `uniform float uOpacity; uniform float uRainbow; uniform float uTime; varying float vA;
+          vec3 hue(float h){ return clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0); }
+          void main(){
+            vec3 c = mix(vec3(1.0), hue(fract(vA * 1.3 + uTime * 0.6)), uRainbow);
+            gl_FragColor = vec4(c, vA * uOpacity * (1.0 + uRainbow * 0.8));
+          }`,
       }),
     );
     this.mesh.frustumCulled = false;
@@ -166,6 +174,18 @@ export class Motes {
     this.points.frustumCulled = false;
     scene.add(this.points);
     this.time = 0;
+    this.fall = 0;
+  }
+
+  /** Pollen, snow, petals or fireflies depending on the world. */
+  setTheme(m) {
+    const mat = this.points.material;
+    mat.color.set(m.color);
+    mat.size = m.size;
+    mat.blending = m.glow ? THREE.AdditiveBlending : THREE.NormalBlending;
+    mat.opacity = m.glow ? 0.85 : 0.75;
+    mat.needsUpdate = true;
+    this.fall = m.fall;
   }
 
   update(dt, center) {
@@ -175,7 +195,7 @@ export class Motes {
     for (let i = 0; i < this.count; i++) {
       const ix = i * 3;
       p[ix] += Math.sin(this.time * 0.5 + i) * dt * 0.8 + dt * 1.5;
-      p[ix + 1] += Math.cos(this.time * 0.7 + i * 1.3) * dt * 0.5;
+      p[ix + 1] += Math.cos(this.time * 0.7 + i * 1.3) * dt * 0.5 - this.fall * dt;
       p[ix + 2] += dt * 0.6;
       for (let a = 0; a < 3; a++) {
         const r = a === 1 ? R * 0.5 : R;
