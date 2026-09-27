@@ -108,3 +108,40 @@ kbd {
   #hud .keys { display: none; }
   .card { padding: 28px 22px 20px; }
 }
+
+.menu { display: flex; flex-direction: column; gap: 10px; }
+.menu button, .hud-btn {
+  font: 700 15px 'Nunito', sans-serif;
+  padding: 11px 20px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(35, 49, 63, 0.25);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.menu button.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.hud-btn {
+  position: absolute;
+  pointer-events: auto;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(20, 50, 70, 0.18);
+  backdrop-filter: blur(4px);
+  padding: 9px 16px;
+  font-size: 14px;
+  touch-action: none;
+}
+#pause-btn { top: 14px; right: 16px; }
+#recenter { top: 14px; right: 76px; }
+.touch-only { display: none; }
+@media (pointer: coarse) { .touch-only { display: block; } }
+#toast {
+  position: fixed; left: 50%; bottom: 60px;
+  transform: translate(-50%, 10px);
+  padding: 10px 18px; border-radius: 999px;
+  background: rgba(251, 248, 240, 0.92); color: var(--ink);
+  font-size: 14px; font-weight: 600; box-shadow: var(--shadow);
+  opacity: 0; transition: opacity 0.4s, transform 0.4s; pointer-events: none;
+  max-width: calc(100vw - 32px); text-align: center;
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); }

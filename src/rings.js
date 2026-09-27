@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { heightAt, WATER_LEVEL } from './terrain.js';
+import { heightAt, getSeed, WATER_LEVEL } from './terrain.js';
 import { mulberry32, hash2 } from './noise.js';
 import { SOFT_SPRITE } from './effects.js';
-import { CHUNK } from './world.js';
+import { CHUNK } from './scatter.js';
 
 const RADIUS = 6;
 
@@ -35,7 +35,7 @@ export class Rings {
   }
 
   spawnForChunk(cx, cz) {
-    const r = mulberry32(hash2(cx, cz, 3));
+    const r = mulberry32(hash2(cx, cz, 3 + getSeed() * 31));
     const list = [];
     if (Math.hypot(cx, cz) < 1.5 && !(cx === 0 && cz === 0)) return list;
     const chains = r() < 0.45 ? 1 : 0;
@@ -77,6 +77,11 @@ export class Rings {
     const ring = { id, mesh, normal: new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)), t: Math.random() * 10, dying: 0 };
     this.active.add(ring);
     return ring;
+  }
+
+  clear() {
+    for (const ring of [...this.active]) this._remove(ring);
+    this.collected.clear();
   }
 
   removeChunk(list) {

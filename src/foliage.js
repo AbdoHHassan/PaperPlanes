@@ -125,19 +125,26 @@ function normaliseGeometry(geo) {
   return g;
 }
 
+const LOD_DISTANCE = 190;
+
 export class Foliage {
   constructor(scene) {
     this.scene = scene;
-    this.models = new Map(); // name -> [{ batchKey, geometryId }]
+    this.models = new Map(); // name -> [{ batch, id, lodId }]
     this.batches = new Map(); // material name -> BatchedMesh
-    this.bounds = new Map(); // name -> Box3
+    this.lodList = []; // handles that can switch detail level
+    this.lodCursor = 0;
+    this.lodCenter = new THREE.Vector3();
     this._m = new THREE.Matrix4();
+    this._q = new THREE.Quaternion();
+    this._s = new THREE.Vector3();
+    this._p = new THREE.Vector3();
     this._c = new THREE.Color();
   }
 
   async load(names, baseUrl, capacity, onProgress) {
     const loader = new GLTFLoader();
-    const parts = new Map(); // material -> { material, entries: [{name, geo}] }
+    const parts = new Map(); // material -> { material, entries: [{ name, geo, lod }] }
     let done = 0;
     const gltfs = await Promise.all(
       names.map((n) =>
@@ -150,16 +157,14 @@ export class Foliage {
 
     for (const [name, gltf] of gltfs) {
       gltf.scene.updateMatrixWorld(true);
-      const box = new THREE.Box3();
       gltf.scene.traverse((o) => {
         if (!o.isMesh) return;
+        const lod = o.name.startsWith('LOD1') || o.parent?.name.startsWith('LOD1') ? 1 : 0;
         const geo = normaliseGeometry(o.geometry.clone().applyMatrix4(o.matrixWorld));
-        box.union(geo.boundingBox ?? (geo.computeBoundingBox(), geo.boundingBox));
         const matName = o.material.name;
         if (!parts.has(matName)) parts.set(matName, { material: o.material, entries: [] });
-        parts.get(matName).entries.push({ name, geo });
+        parts.get(matName).entries.push({ name, geo, lod });
       });
-      this.bounds.set(name, box);
     }
 
     for (const [matName, { material, entries }] of parts) {
@@ -170,47 +175,91 @@ export class Foliage {
         idx += geo.index.count;
       }
       const { mat, depth } = makeMaterial(material);
-      const maxInstances = capacity(matName);
-      const batch = new THREE.BatchedMesh(maxInstances, verts, idx, mat);
+      const batch = new THREE.BatchedMesh(capacity(matName), verts, idx, mat);
       batch.name = matName;
       batch.sortObjects = false;
       batch.frustumCulled = false;
       batch.castShadow = !['Grass', 'Flowers', 'Leaves', 'Mushrooms'].includes(matName);
       batch.receiveShadow = true;
       if (depth) batch.customDepthMaterial = depth;
-      for (const { name, geo } of entries) {
+      batch.tintable = matName.startsWith('Leaves') || matName === 'Grass';
+      // LOD0 entries first so LOD1 can attach to them.
+      entries.sort((a, b) => a.lod - b.lod);
+      for (const { name, geo, lod } of entries) {
         const id = batch.addGeometry(geo);
         if (!this.models.has(name)) this.models.set(name, []);
-        this.models.get(name).push({ batch, id });
+        const list = this.models.get(name);
+        if (lod === 0) list.push({ batch, id, lodId: -1 });
+        else {
+          const base = list.find((p) => p.batch === batch);
+          if (base) base.lodId = id;
+        }
       }
       this.batches.set(matName, batch);
       this.scene.add(batch);
     }
+    for (const list of this.models.values()) list.hasLod = list.some((p) => p.lodId >= 0);
   }
 
-  /** Adds one model instance. `tint` applies to leaves/foliage only. */
-  add(name, position, rotY, scale, tint) {
+  /** Adds one model instance; returns a handle for remove(). */
+  add(name, x, y, z, rotY, scale, r, g, b) {
     const parts = this.models.get(name);
     if (!parts) return null;
-    const m = this._m.compose(
-      position,
-      new THREE.Quaternion().setFromAxisAngle(THREE.Object3D.DEFAULT_UP, rotY),
-      new THREE.Vector3(scale, scale, scale),
-    );
-    const handle = [];
-    for (const { batch, id } of parts) {
+    this._q.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, rotY);
+    const m = this._m.compose(this._p.set(x, y, z), this._q, this._s.set(scale, scale, scale));
+    const dx = x - this.lodCenter.x;
+    const dz = z - this.lodCenter.z;
+    const lod = parts.hasLod && dx * dx + dz * dz > LOD_DISTANCE * LOD_DISTANCE ? 1 : 0;
+    const handle = { parts: [], x, z, lod, slot: -1 };
+    for (const p of parts) {
+      const batch = p.batch;
       if (batch.instanceCount >= batch.maxInstanceCount) continue;
-      const inst = batch.addInstance(id);
+      const inst = batch.addInstance(lod && p.lodId >= 0 ? p.lodId : p.id);
       batch.setMatrixAt(inst, m);
-      const tintable = batch.name.startsWith('Leaves') || batch.name === 'Grass';
-      batch.setColorAt(inst, tintable && tint ? tint : this._c.setRGB(1, 1, 1));
-      handle.push(batch, inst);
+      batch.setColorAt(inst, batch.tintable ? this._c.setRGB(r, g, b) : this._c.setRGB(1, 1, 1));
+      handle.parts.push(batch, inst, p.id, p.lodId);
+    }
+    if (parts.hasLod) {
+      handle.slot = this.lodList.length;
+      this.lodList.push(handle);
     }
     return handle;
   }
 
   remove(handle) {
     if (!handle) return;
-    for (let i = 0; i < handle.length; i += 2) handle[i].deleteInstance(handle[i + 1]);
+    const P = handle.parts;
+    for (let i = 0; i < P.length; i += 4) P[i].deleteInstance(P[i + 1]);
+    if (handle.slot >= 0) {
+      const last = this.lodList.pop();
+      if (last !== handle) {
+        this.lodList[handle.slot] = last;
+        last.slot = handle.slot;
+      }
+      handle.slot = -1;
+    }
+  }
+
+  /** Re-evaluates the detail level of a slice of instances each frame. */
+  updateLOD(center, perFrame = 1500) {
+    this.lodCenter.copy(center);
+    const list = this.lodList;
+    const n = Math.min(perFrame, list.length);
+    const far2 = (LOD_DISTANCE + 10) ** 2;
+    const near2 = (LOD_DISTANCE - 10) ** 2; // hysteresis so trees don't flicker
+    for (let k = 0; k < n; k++) {
+      if (this.lodCursor >= list.length) this.lodCursor = 0;
+      const h = list[this.lodCursor++];
+      const dx = h.x - center.x;
+      const dz = h.z - center.z;
+      const d2 = dx * dx + dz * dz;
+      const want = d2 > far2 ? 1 : d2 < near2 ? 0 : h.lod;
+      if (want === h.lod) continue;
+      h.lod = want;
+      const P = h.parts;
+      for (let i = 0; i < P.length; i += 4) {
+        if (P[i + 3] >= 0) P[i].setGeometryIdAt(P[i + 1], want ? P[i + 3] : P[i + 2]);
+      }
+    }
   }
 }

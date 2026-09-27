@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Foliage, windUniforms } from './foliage.js';
 import { World, MODEL_NAMES } from './world.js';
-import { heightAt, WATER_LEVEL } from './terrain.js';
+import { heightAt, setSeed, WATER_LEVEL } from './terrain.js';
 import { PaperPlane } from './plane.js';
 import { SKY, createSky, Clouds, createWater } from './sky.js';
 import { Trail, WindStreaks, Motes, Puffs, Birds } from './effects.js';
@@ -62,7 +62,22 @@ const audio = new Audio();
 const input = new Input(canvas);
 
 const START = new THREE.Vector3(0, 42, -190);
-plane.reset(START, 0);
+
+// Every visit is a new world, unless a ?seed= is shared in the URL.
+const params = new URLSearchParams(location.search);
+let seed = Number(params.get('seed')) || Math.floor(Math.random() * 1e6) + 1;
+function applySeed(s) {
+  seed = s;
+  setSeed(seed);
+  world.setSeed(seed);
+  rings.clear();
+  plane.reset(START, 0);
+  trails.forEach((t) => t.reset());
+  $('seed').textContent = seed;
+  params.set('seed', seed);
+  history.replaceState(null, '', `${location.pathname}?${params}`);
+}
+applySeed(seed);
 
 // ---------------------------------------------------------------------------
 // State
@@ -84,13 +99,19 @@ const camUp = new THREE.Vector3(0, 1, 0);
 const tmpV = new THREE.Vector3();
 const tmpQ = new THREE.Quaternion();
 const tmpE = new THREE.Euler(0, 0, 0, 'YXZ');
+const tmpAxis = new THREE.Vector3();
+const tmpLean = new THREE.Vector3();
+const tmpPuff = new THREE.Vector3();
+const tmpProj = new THREE.Vector3();
 
 function chaseCamera(dt, snap = false) {
   // Offset behind the plane, pitched a little with it.
   tmpE.set(-plane.pitch * 0.45, plane.yaw, 0);
   tmpQ.setFromEuler(tmpE);
-  const back = 7.5 + Math.max(0, plane.speed - plane.cruise) * 0.06;
-  tmpV.set(0, 2.7, -back).applyQuaternion(tmpQ).add(plane.position);
+  // Tall (portrait) screens see less sideways, so sit further back.
+  const portrait = Math.max(1, 1 / camera.aspect) ** 0.6;
+  const back = (7.5 + Math.max(0, plane.speed - plane.cruise) * 0.06) * portrait;
+  tmpV.set(0, 2.7 * portrait, -back).applyQuaternion(tmpQ).add(plane.position);
   const k = snap ? 1 : 1 - Math.exp(-dt * 5.5);
   camPos.lerp(tmpV, k);
   const ground = Math.max(heightAt(camPos.x, camPos.z), WATER_LEVEL + 0.5);
@@ -100,8 +121,9 @@ function chaseCamera(dt, snap = false) {
   camLook.lerp(tmpV, snap ? 1 : 1 - Math.exp(-dt * 8));
 
   // Lean the horizon a little into turns.
-  const lean = new THREE.Vector3(0, 1, 0).applyAxisAngle(plane.forward.clone().setY(0).normalize(), plane.roll * 0.25);
-  camUp.lerp(lean, snap ? 1 : 1 - Math.exp(-dt * 3)).normalize();
+  tmpAxis.copy(plane.forward).setY(0).normalize();
+  tmpLean.set(0, 1, 0).applyAxisAngle(tmpAxis, plane.roll * 0.25);
+  camUp.lerp(tmpLean, snap ? 1 : 1 - Math.exp(-dt * 3)).normalize();
 
   camera.position.copy(camPos);
   if (state.shake > 0) {
@@ -111,7 +133,7 @@ function chaseCamera(dt, snap = false) {
   }
   camera.up.copy(camUp);
   camera.lookAt(camLook);
-  const fov = 60 + THREE.MathUtils.clamp((plane.speed - plane.cruise) * 0.45, -4, 18);
+  const fov = 60 + (portrait - 1) * 12 + THREE.MathUtils.clamp((plane.speed - plane.cruise) * 0.45, -4, 18);
   camera.fov += (fov - camera.fov) * (1 - Math.exp(-dt * 3));
   camera.updateProjectionMatrix();
 }
@@ -159,7 +181,7 @@ function updateHud() {
     hud.pointer.style.opacity = 0;
     return;
   }
-  const p = ring.mesh.position.clone().project(camera);
+  const p = tmpProj.copy(ring.mesh.position).project(camera);
   const behind = p.z > 1;
   if (behind) {
     p.x = -p.x;
@@ -187,12 +209,17 @@ timer.connect(document);
 const grassPuff = new THREE.Color('#bfe07a');
 const waterPuff = new THREE.Color('#e8fbff');
 let perfAcc = 0;
+let smoothDt = 1 / 60;
 let perfFrames = 0;
 
 function frame(now) {
   requestAnimationFrame(frame);
   timer.update(now);
-  const dt = Math.min(timer.getDelta(), 1 / 20);
+  // Lightly smooth the frame delta: rAF timestamps jitter by a millisecond or
+  // two, which otherwise shows up as micro-stutter in the chase camera.
+  const raw = Math.min(timer.getDelta(), 1 / 20);
+  smoothDt += (raw - smoothDt) * (Math.abs(raw - smoothDt) > 0.01 ? 1 : 0.2);
+  const dt = smoothDt;
   if (state.mode === 'paused' || state.mode === 'loading') {
     renderer.render(scene, camera);
     return;
@@ -204,7 +231,7 @@ function frame(now) {
   plane.update(dt, controls);
 
   if (plane.bump > 0) {
-    puffs.emit(plane.position.clone().setY(plane.position.y - 2), plane.splash ? waterPuff : grassPuff, 2);
+    puffs.emit(tmpPuff.copy(plane.position).setY(plane.position.y - 2), plane.splash ? waterPuff : grassPuff, 2);
     if (plane.bump > 0.4 && state.shake < 0.05) {
       state.shake = 0.25;
       audio.thump();
@@ -222,7 +249,8 @@ function frame(now) {
     audio.chime();
   }
 
-  world.update(plane.position, 4);
+  world.update(plane.position);
+  foliage.updateLOD(camera.position);
 
   if (state.mode === 'flying') chaseCamera(dt);
   else titleCamera(dt);
@@ -273,11 +301,28 @@ function frame(now) {
 
 function start() {
   if (state.mode !== 'title') return;
+  // Ask for motion access straight from the tap (required on iOS).
+  if (input.gyro.supported) {
+    input.enableGyro().then((ok) => {
+      $('recenter').classList.toggle('hidden', !ok);
+      $('gyro-toggle').classList.toggle('hidden', !ok);
+      showToast(ok ? 'Tilt to steer · hold the screen for a gust' : 'Drag to steer · two fingers for a gust');
+    });
+  }
   audio.start();
   state.mode = 'flying';
   $('title').classList.add('fade');
   setTimeout(() => $('title').classList.add('hidden'), 1300);
   $('hud').classList.remove('hidden');
+}
+
+let toastTimer = 0;
+function showToast(text) {
+  const el = $('toast');
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
 }
 
 function togglePause() {
@@ -293,7 +338,38 @@ function togglePause() {
 }
 
 $('start').addEventListener('click', start);
-$('paused').addEventListener('click', togglePause);
+$('resume').addEventListener('click', togglePause);
+$('new-world').addEventListener('click', async () => {
+  $('paused').classList.add('hidden');
+  state.mode = 'loading';
+  applySeed(Math.floor(Math.random() * 1e6) + 1);
+  state.score = 0;
+  hud.score.textContent = 0;
+  await buildAround();
+  chaseCamera(0, true);
+  state.mode = 'flying';
+  audio.ctx?.resume();
+  showToast(`World #${seed}`);
+});
+$('gyro-toggle').addEventListener('click', () => {
+  if (input.gyro.enabled) input.disableGyro();
+  else input.enableGyro();
+  $('gyro-toggle').textContent = input.gyro.enabled ? 'Tilt steering: on' : 'Tilt steering: off';
+  $('recenter').classList.toggle('hidden', !input.gyro.enabled);
+});
+const recenter = (e) => {
+  e.stopPropagation();
+  e.preventDefault();
+  input.recenter();
+  showToast('Level flight set to how you hold the phone now');
+};
+$('recenter').addEventListener('touchstart', recenter, { passive: false });
+$('recenter').addEventListener('click', recenter);
+$('pause-btn').addEventListener('touchstart', (e) => (e.preventDefault(), togglePause()), { passive: false });
+$('pause-btn').addEventListener('click', togglePause);
+// A new screen orientation means a new "neutral" grip.
+screen.orientation?.addEventListener?.('change', () => input.recenter());
+window.addEventListener('orientationchange', () => input.recenter());
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Enter' || e.code === 'Space') start();
   if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
@@ -316,20 +392,25 @@ window.addEventListener('resize', () => {
 // ---------------------------------------------------------------------------
 // Boot
 
+// Let the workers build the nearby world before revealing it.
+async function buildAround(onProgress) {
+  foliage.lodCenter.copy(plane.position);
+  const t0 = performance.now();
+  let peak = 1;
+  while (!world.readyAround(plane.position, 1) && performance.now() - t0 < 20000) {
+    world.update(plane.position, 4000, 12);
+    peak = Math.max(peak, world.busy);
+    onProgress?.(1 - world.busy / peak);
+    await new Promise((r) => setTimeout(r, 16));
+  }
+}
+
 async function boot() {
   const bar = $('progress');
   const capacity = (mat) => (mat.startsWith('Bark') || mat.startsWith('Leaves_') ? 14000 : 5000);
   await foliage.load(MODEL_NAMES, `${import.meta.env.BASE_URL}models/`, capacity, (p) => (bar.style.width = `${p * 80}%`));
 
-  // Build the nearby world before revealing it.
-  const total = 60;
-  let n = 0;
-  while (world.update(plane.position, 12) && n < total) {
-    n++;
-    bar.style.width = `${80 + (n / total) * 20}%`;
-    await new Promise((r) => setTimeout(r, 0));
-  }
-  bar.style.width = '100%';
+  await buildAround((p) => (bar.style.width = `${80 + p * 20}%`));
 
   chaseCamera(0, true);
   camPos.copy(plane.position).add(new THREE.Vector3(10, 4, 10));
@@ -339,7 +420,7 @@ async function boot() {
 }
 
 requestAnimationFrame(frame);
-window.__paperplanes = { state, renderer, plane, world };
+window.__paperplanes = { state, renderer, plane, world, camera, foliage, input, chaseCamera };
 boot().catch((err) => {
   console.error(err);
   document.querySelector('#loading .hint').textContent = 'Something went wrong loading the scene. Check the console.';

@@ -5,8 +5,8 @@ export class Trail {
   constructor(scene, length = 60, width = 0.08) {
     this.length = length;
     this.width = width;
-    this.points = [];
-    this.ups = [];
+    this.hist = new Float32Array(length * 6); // [px,py,pz,ux,uy,uz] per sample
+    this.filled = 0;
     const count = length * 2;
     this.positions = new Float32Array(count * 3);
     this.alphas = new Float32Array(count);
@@ -37,21 +37,27 @@ export class Trail {
     scene.add(this.mesh);
   }
 
+  reset() {
+    this.filled = 0;
+  }
+
   update(point, up, intensity) {
-    this.points.unshift(point.clone());
-    this.ups.unshift(up.clone());
-    if (this.points.length > this.length) {
-      this.points.pop();
-      this.ups.pop();
-    }
-    const n = this.points.length;
+    const H = this.hist;
+    H.copyWithin(6, 0, H.length - 6);
+    H[0] = point.x; H[1] = point.y; H[2] = point.z;
+    H[3] = up.x; H[4] = up.y; H[5] = up.z;
+    this.filled = Math.min(this.filled + 1, this.length);
+    const n = this.filled;
+    const P = this.positions;
     for (let i = 0; i < this.length; i++) {
-      const p = this.points[Math.min(i, n - 1)];
-      const u = this.ups[Math.min(i, n - 1)];
+      const o = Math.min(i, n - 1) * 6;
       const t = i / (this.length - 1);
       const w = this.width * (1 - t * 0.6);
-      this.positions.set([p.x + u.x * w, p.y + u.y * w, p.z + u.z * w], i * 6);
-      this.positions.set([p.x - u.x * w, p.y - u.y * w, p.z - u.z * w], i * 6 + 3);
+      const px = H[o], py = H[o + 1], pz = H[o + 2];
+      const ux = H[o + 3] * w, uy = H[o + 4] * w, uz = H[o + 5] * w;
+      const q = i * 6;
+      P[q] = px + ux; P[q + 1] = py + uy; P[q + 2] = pz + uz;
+      P[q + 3] = px - ux; P[q + 4] = py - uy; P[q + 5] = pz - uz;
       const a = (1 - t) * (1 - t) * intensity * (i < n ? 1 : 0);
       this.alphas[i * 2] = a;
       this.alphas[i * 2 + 1] = a;
@@ -78,7 +84,8 @@ export class WindStreaks {
     );
     this.lines.frustumCulled = false;
     scene.add(this.lines);
-    for (let i = 0; i < count; i++) this.items.push({ p: new THREE.Vector3(), life: 0, max: 1, len: 1 });
+    for (let i = 0; i < count; i++) this.items.push({ p: new THREE.Vector3(), life: 0, max: 1, len: 1, drift: 0 });
+    this._side = new THREE.Vector3();
   }
 
   update(dt, plane, strength) {
@@ -90,7 +97,8 @@ export class WindStreaks {
       it.life -= dt;
       if (it.life <= 0) {
         it.max = it.life = 0.6 + Math.random() * 0.9;
-        const side = new THREE.Vector3(Math.random() - 0.5, (Math.random() - 0.5) * 0.7, Math.random() - 0.5)
+        const side = this._side
+          .set(Math.random() - 0.5, (Math.random() - 0.5) * 0.7, Math.random() - 0.5)
           .normalize()
           .multiplyScalar(4 + Math.random() * 18);
         it.p.copy(plane.position).addScaledVector(dir, 25 + Math.random() * 40).add(side);
@@ -101,9 +109,13 @@ export class WindStreaks {
       it.p.y += it.drift * dt;
       const t = it.life / it.max;
       const a = Math.sin(t * Math.PI) * 0.55 * strength;
-      const b = it.p.clone().addScaledVector(dir, -it.len * (0.5 + strength));
-      pos.set([it.p.x, it.p.y, it.p.z, b.x, b.y, b.z], i * 6);
-      col.set([1, 1, 1, a, 1, 1, 1, 0], i * 8);
+      const L = -it.len * (0.5 + strength);
+      const q = i * 6;
+      pos[q] = it.p.x; pos[q + 1] = it.p.y; pos[q + 2] = it.p.z;
+      pos[q + 3] = it.p.x + dir.x * L; pos[q + 4] = it.p.y + dir.y * L; pos[q + 5] = it.p.z + dir.z * L;
+      col.fill(1, i * 8, i * 8 + 8);
+      col[i * 8 + 3] = a;
+      col[i * 8 + 7] = 0;
     }
     this.geo.attributes.position.needsUpdate = true;
     this.geo.attributes.color.needsUpdate = true;
@@ -204,7 +216,9 @@ export class Puffs {
     for (let k = 0; k < n; k++) {
       const it = this.items[this.next];
       this.next = (this.next + 1) % this.count;
-      it.p.copy(pos).add(new THREE.Vector3((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2));
+      it.p.copy(pos);
+      it.p.x += (Math.random() - 0.5) * 2;
+      it.p.z += (Math.random() - 0.5) * 2;
       it.v.set((Math.random() - 0.5) * 6, 3 + Math.random() * 5, (Math.random() - 0.5) * 6);
       it.life = 0.8 + Math.random() * 0.5;
       it.color = color;
@@ -221,9 +235,14 @@ export class Puffs {
         it.v.y -= 9 * dt;
         it.p.addScaledVector(it.v, dt);
       }
-      const on = it.life > 0 ? 1 : 0;
-      pos.set([it.p.x, on ? it.p.y : -9999, it.p.z], i * 3);
-      if (it.color) col.set([it.color.r, it.color.g, it.color.b], i * 3);
+      pos[i * 3] = it.p.x;
+      pos[i * 3 + 1] = it.life > 0 ? it.p.y : -9999;
+      pos[i * 3 + 2] = it.p.z;
+      if (it.color) {
+        col[i * 3] = it.color.r;
+        col[i * 3 + 1] = it.color.g;
+        col[i * 3 + 2] = it.color.b;
+      }
     }
     this.points.geometry.attributes.position.needsUpdate = true;
     this.points.geometry.attributes.color.needsUpdate = true;
@@ -265,6 +284,9 @@ export class Birds {
     this.center = new THREE.Vector3(0, 90, 300);
     this._m = new THREE.Matrix4();
     this._q = new THREE.Quaternion();
+    this._e = new THREE.Euler();
+    this._p = new THREE.Vector3();
+    this._s = new THREE.Vector3(1.5, 1.5, 1.5);
     scene.add(this.mesh);
   }
 
@@ -278,15 +300,14 @@ export class Birds {
       this.center.y = Math.max(groundAt(this.center.x, this.center.z), 0) + 50 + Math.random() * 40;
     }
     this.center.x += dt * 4;
-    const s = 1.5;
     for (let i = 0; i < this.count; i++) {
       const b = this.birds[i];
       b.angle += b.speed * dt;
       const x = this.center.x + Math.cos(b.angle) * b.r;
       const z = this.center.z + Math.sin(b.angle) * b.r;
       const y = this.center.y + b.h + Math.sin(time * 0.6 + i) * 2;
-      this._q.setFromEuler(new THREE.Euler(0, -b.angle, -0.3));
-      this._m.compose(new THREE.Vector3(x, y, z), this._q, new THREE.Vector3(s, s, s));
+      this._q.setFromEuler(this._e.set(0, -b.angle, -0.3));
+      this._m.compose(this._p.set(x, y, z), this._q, this._s);
       this.mesh.setMatrixAt(i, this._m);
     }
     this.mesh.instanceMatrix.needsUpdate = true;
