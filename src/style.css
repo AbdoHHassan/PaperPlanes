@@ -281,3 +281,7 @@ button.ghost {
 #poem-saved li {
   font: italic 400 14px 'Fraunces', Georgia, serif; padding: 8px 0; border-top: 1px solid rgba(35, 49, 63, 0.1);
 }
+
+.sliders { display: flex; gap: 16px; justify-content: center; margin: 0 0 16px; font-size: 13px; font-weight: 700; }
+.sliders label { display: flex; align-items: center; gap: 8px; }
+.sliders input { width: 110px; accent-color: #c9772a; }

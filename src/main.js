@@ -114,6 +114,7 @@ function applyWorld(s, key, keepPlace = false) {
   rings.chainChance = poemWorld ? 0.1 : 0.35;
   rings.wordGates = !poemWorld;
   applyThemeVisuals(THEMES[key]);
+  audio.setTheme(key);
   updatePoemUi(poemWorld);
   if (!keepPlace) plane.reset(START, 0);
   trails.forEach((t) => t.reset());
@@ -158,6 +159,13 @@ const tmpAxis = new THREE.Vector3();
 const tmpLean = new THREE.Vector3();
 const tmpPuff = new THREE.Vector3();
 const tmpProj = new THREE.Vector3();
+const tmpPan = new THREE.Vector3();
+
+/** Stereo position (-1 left .. 1 right) of a world point, from the camera's view. */
+function panOf(pos) {
+  tmpPan.copy(pos).applyMatrix4(camera.matrixWorldInverse);
+  return THREE.MathUtils.clamp(tmpPan.x / (Math.abs(tmpPan.z) + Math.abs(tmpPan.x) + 1e-3), -1, 1);
+}
 
 function chaseCamera(dt, snap = false) {
   // Offset behind the plane, pitched a little with it.
@@ -256,7 +264,7 @@ function onRing({ ring, type, position }) {
   bursts.emit(position, ring.normal, colors, def.rainbow ? 140 : type === 'gold' ? 60 : 100, ring.radius, def.portal ? 22 : 14);
   feedback.flash(def.rainbow ? '#ff9bf0' : def.glow, type === 'gold' ? 0.22 : 0.45);
   feedback.haptic(HAPTICS[type] ?? 15);
-  audio.ring(type, state.combo);
+  audio.ring(type, state.combo, panOf(position) * 0.7);
 
   const label = type === 'gold' ? `+${points}` : `${def.label}${mult > 1 ? ` +${points}` : ''}`;
   feedback.popup(position, label, def.rainbow ? '#ffffff' : def.glow, type !== 'gold');
@@ -320,7 +328,8 @@ function catchWord(word, position) {
     if (text) readLine(text);
   } else {
     poem.add(word);
-    state.lineFreqs.push(audio.word(word.pos, poem.current.length - 1));
+    state.lineFreqs.push(audio.word(word.pos, poem.current.length - 1, panOf(position) * 0.6));
+    audio.magnet();
     feedback.popup(position, word.w, color, true);
     // The mood drifts with what you choose, so imagery gathers without being forced.
     if (word.moods.length && Math.random() < 0.6) state.mood = word.moods[0];
@@ -430,11 +439,31 @@ async function travel(target = null) {
   chaseCamera(0, true);
   state.mode = 'flying';
   feedback.whiteout(false);
+  audio.arrive();
   showToast(next === 'ethereal' ? '✦ Dreaming Hours · fly through words to write a poem' : `✦ ${THEMES[next].name}`);
 }
 
 // ---------------------------------------------------------------------------
 // Animals
+
+// Now and then a nearby animal calls out, placed where it is.
+let callTimer = 2;
+function animalCalls(dt) {
+  callTimer -= dt;
+  if (callTimer > 0) return;
+  callTimer = 1.5 + Math.random() * 2.5;
+  const near = [];
+  for (const a of animals.active) {
+    if (!a.group.visible) continue;
+    const d = a.group.position.distanceTo(plane.position);
+    if (d < 160 && state.time > (a.nextCall ?? 0)) near.push([a, d]);
+  }
+  if (!near.length) return;
+  const [a, d] = near[Math.floor(Math.random() * near.length)];
+  a.nextCall = state.time + 10 + Math.random() * 12;
+  if (a.kind === 'rabbit') return; // quiet ones
+  audio.animal(a.kind, panOf(a.group.position), 1 - d / 160);
+}
 
 function updatePaws() {
   hud.paws.textContent = `${animals.discovered.size}/${SPECIES_KEYS.length}`;
@@ -442,7 +471,7 @@ function updatePaws() {
 
 function onDiscover(a) {
   const sp = SPECIES[a.kind];
-  audio.discover();
+  audio.discover(panOf(a.group.position) * 0.6);
   feedback.haptic([20, 60, 20]);
   feedback.popup(a.group.position, `${sp.emoji} ${sp.name}!`, '#ffe9a8', true);
   showToast(`New animal: ${sp.emoji} ${sp.name} · ${animals.discovered.size}/${SPECIES_KEYS.length} found`);
@@ -523,7 +552,7 @@ function frame(now) {
     puffs.emit(tmpPuff.copy(plane.position).setY(plane.position.y - 2), plane.splash ? waterPuff : grassPuff, 2);
     if (plane.bump > 0.4 && state.shake < 0.05) {
       state.shake = 0.25;
-      audio.thump();
+      audio.thump(plane.splash ? 'water' : 'grass');
     }
   }
 
@@ -574,7 +603,22 @@ function frame(now) {
   motes.update(dt, plane.position);
   puffs.update(dt);
   birds.update(dt, state.time, plane, heightAt);
-  audio.update(plane.speed, plane.cruise, controls.boost);
+  const groundHere = heightAt(plane.position.x, plane.position.z);
+  audio.update({
+    dt,
+    speed: plane.speed,
+    cruise: plane.cruise,
+    boosting: controls.boost,
+    gust: plane.gustFraction,
+    roll: plane.roll,
+    altitude: plane.position.y,
+    groundDist: plane.groundDist,
+    overWater: groundHere < WATER_LEVEL,
+    combo: state.time - state.lastRing < 4.5 ? state.combo : 0,
+  });
+  if (controls.boost && !state.wasBoosting) audio.gust();
+  state.wasBoosting = controls.boost;
+  animalCalls(dt);
   if (state.mode === 'flying' && !state.hudHidden) updateHud();
 
   renderer.render(scene, camera);
@@ -640,9 +684,10 @@ function showToast(text) {
 function togglePause() {
   if (state.mode === 'flying') {
     state.mode = 'paused';
+    audio.paper();
     renderJournal();
     $('paused').classList.remove('hidden');
-    audio.ctx?.suspend();
+    setTimeout(() => state.mode === 'paused' && audio.ctx?.suspend(), 400);
   } else if (state.mode === 'paused') {
     state.mode = 'flying';
     $('paused').classList.add('hidden');
@@ -652,10 +697,21 @@ function togglePause() {
 }
 
 $('start').addEventListener('click', start);
+// Soft click on every button.
+document.addEventListener('click', (e) => {
+  if (e.target.closest('button')) audio.click();
+});
+// Volume sliders (pause menu).
+for (const kind of ['music', 'sfx']) {
+  const el = $(`vol-${kind}`);
+  el.value = Math.round(audio.vol[kind] * 100);
+  el.addEventListener('input', () => audio.setVolume(kind, el.value / 100));
+}
 $('start-poem').addEventListener('click', startPoem);
 
 // Poem view ("the fridge door").
 function openPoem() {
+  audio.paper();
   if (state.mode === 'flying') togglePause(true);
   poem.renderDoor();
   $('paused').classList.add('hidden');
