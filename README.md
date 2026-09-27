@@ -66,7 +66,8 @@ Add `?low` or `?high` to the URL to force a quality tier (touch devices default 
 | `src/plane.js` | The paper plane mesh (with a canvas notebook-paper texture) and an arcade glider model: bank to turn, trade height for speed, stall recovery, soft bounces off ground and water. |
 | `src/sky.js` | Gradient sky with sun and cirrus, drifting low-poly clouds, and animated low-poly water. |
 | `src/effects.js` | Wingtip trails, wind streaks, pollen motes, splash puffs, and a flock of birds. |
-| `src/rings.js` | Ring types and their layout: chains that suggest routes, plus rare portals. |
+| `src/rings.js` | Ring types and their layout. Chains are planned from the flight model: rings are spaced by the speed you'll actually have there (including the previous ring's gust), turns stay under half of full bank and shrink as speed rises, climbs and descents are capped at 9° and 12°, and heights clear the ground and treetops without needless dips. |
+| `scripts/ring-flight-test.cjs` | Simulated pilot that flies every chain with the real flight model and reports the hit rate; use it when tuning ring layout or handling. |
 | `src/fx.js` | Ring feedback: spark bursts, floating labels, screen flash, haptics. |
 | `src/animals.js` | Procedural low-poly animals: habitats, behaviours (grazing, fleeing, hopping, swimming, leaping, soaring) and discovery. |
 | `src/themes.js` | The five world themes: sky, light, fog, terrain and foliage palettes, and ambient particles. |

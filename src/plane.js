@@ -71,10 +71,41 @@ function buildPlaneGeometry() {
 
 // ---------------------------------------------------------------------------
 
-const CRUISE = 24;
+export const CRUISE = 24;
 const MIN_SPEED = 11;
 const MAX_SPEED = 60;
 const CEILING = 480;
+/** Turn rate (rad/s) at full bank and cruise speed; ring layout depends on it. */
+export const MAX_TURN_RATE = 0.8 * Math.sin(1.05);
+/** Pitch angle at full stick. */
+export const MAX_PITCH = 0.85;
+
+/**
+ * Speed dynamics, shared by the plane and the ring planner so rings can be
+ * spaced by where the plane will actually be. `s` holds
+ * { speed, gust, gustTotal, gustStrength }.
+ */
+export function applyGust(s, seconds, strength) {
+  // Diminishing returns: a gust adds less the faster you already are, so a
+  // long chain feels brisk but never runs away from you.
+  strength *= Math.max(0.15, 1 - (s.speed - CRUISE) / 24);
+  s.gustStrength = Math.max(strength, s.gust > 0 ? s.gustStrength * 0.5 : 0);
+  s.gust = Math.max(s.gust, seconds);
+  s.gustTotal = s.gust;
+  s.speed = Math.min(MAX_SPEED, s.speed + strength * 0.15);
+}
+
+export function stepSpeed(s, dt, pitch, extraAccel = 0) {
+  let gustAccel = 0;
+  if (s.gust > 0) {
+    s.gust = Math.max(0, s.gust - dt);
+    gustAccel = s.gustStrength * Math.min(1, (s.gust / s.gustTotal) * 2.5);
+  }
+  // Climbing trades speed for height; diving gains it back; drag pulls to cruise.
+  const accel = -9.81 * Math.sin(pitch) * 1.1 + (CRUISE - s.speed) * 0.3;
+  s.speed += (accel + extraAccel + gustAccel) * dt;
+  s.speed = Math.min(Math.max(s.speed, MIN_SPEED), MAX_SPEED + (s.gust > 0 ? 6 : 0));
+}
 
 export class PaperPlane {
   constructor(scene) {
@@ -133,10 +164,7 @@ export class PaperPlane {
 
   /** A short burst of speed that fades out after `seconds`. */
   gustFor(seconds, strength) {
-    this.gust = Math.max(this.gust, seconds);
-    this.gustTotal = this.gust;
-    this.gustStrength = Math.max(strength, this.gust > 0 ? this.gustStrength * 0.5 : 0);
-    this.speed = Math.min(MAX_SPEED, this.speed + strength * 0.2);
+    applyGust(this, seconds, strength);
   }
 
   get gustFraction() {
@@ -154,30 +182,18 @@ export class PaperPlane {
     const k = (rate) => 1 - Math.exp(-rate * dt);
 
     // Banking drives turning, like a real glider.
-    const targetRoll = input.x * 1.05;
+    const targetRoll = input.x * 1.05; // must match MAX_TURN_RATE
     this.roll += (targetRoll - this.roll) * k(2.6);
     this.yaw -= Math.sin(this.roll) * 0.8 * dt * (0.6 + 0.4 * Math.min(1, this.speed / CRUISE));
-
-    // Ring gusts: strong at first, easing out as the timer runs down.
-    let gustAccel = 0;
-    if (this.gust > 0) {
-      this.gust = Math.max(0, this.gust - dt);
-      const f = this.gust / this.gustTotal;
-      gustAccel = this.gustStrength * Math.min(1, f * 2.5);
-    }
 
     let targetPitch = input.y * 0.85 - 0.04;
     if (this.speed < MIN_SPEED + 4) targetPitch = Math.min(targetPitch, -0.2); // stall: nose drops
     if (this.position.y > CEILING) targetPitch = Math.min(targetPitch, -0.15);
     this.pitch += (targetPitch - this.pitch) * k(2.0);
 
-    // Energy: climbing trades speed for height; diving gains it back.
-    let accel = -9.81 * Math.sin(this.pitch) * 1.1;
-    accel += (CRUISE - this.speed) * 0.3;
     if (input.boost) this.addBoost(dt * 20);
     this.boost *= Math.exp(-dt * 0.9);
-    this.speed += (accel + this.boost * 0.5 + gustAccel) * dt;
-    this.speed = THREE.MathUtils.clamp(this.speed, MIN_SPEED, MAX_SPEED + (this.gust > 0 ? 15 : 0));
+    stepSpeed(this, dt, this.pitch, this.boost * 0.5);
 
     // Tricks: a loop-the-loop really flies the loop; a barrel roll is a spin.
     let flightPitch = this.pitch;
