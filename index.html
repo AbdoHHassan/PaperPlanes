@@ -26,9 +26,12 @@
       <div class="stats"><span id="alt">0</span> m &nbsp;·&nbsp; <span id="spd">0</span> km/h</div>
       <div class="keys"><kbd>M</kbd> sound &nbsp; <kbd>I</kbd> invert &nbsp; <kbd>H</kbd> hide &nbsp; <kbd>P</kbd> pause</div>
       <button id="pause-btn" class="hud-btn touch-only" aria-label="Pause">❚❚</button>
+      <button id="poem-btn" class="hud-btn hidden" aria-label="Your poem">✎ poem</button>
       <button id="recenter" class="hud-btn hidden" aria-label="Recenter tilt">◎ Level</button>
     </div>
     <div id="toast"></div>
+    <div id="reading"></div>
+    <div id="poem-strip" class="hidden"></div>
 
     <div id="title">
       <div class="card">
@@ -38,12 +41,16 @@
           <div class="bar"><div id="progress"></div></div>
           <p class="hint">Folding the plane…</p>
         </div>
-        <button id="start" class="hidden">Take flight</button>
+        <div id="start-row" class="start-row">
+          <button id="start" class="hidden">Take flight</button>
+          <button id="start-poem" class="hidden ghost">✎ Write a poem</button>
+        </div>
         <ul class="controls">
           <li><b>Steer</b> move the mouse · WASD / arrows · tilt your phone</li>
           <li><b>Gust</b> hold click · Space · touch and hold</li>
           <li><b>Rings</b> gold gusts · <span style="color:#3ab8ff">⚡ swift</span> · <span style="color:#d05ad0">★ prism</span> · <span style="color:#ff5fa0">↻ flip</span> · <span style="color:#9a6bff">◎ portal</span></li>
           <li><b>Explore</b> find all 8 animals hiding in the landscape</li>
+          <li><b>Write</b> word portals lead to Dreaming Hours, where you catch floating words to make a poem</li>
         </ul>
       </div>
     </div>
@@ -56,8 +63,31 @@
         <ul id="journal"></ul>
         <div class="menu">
           <button id="resume" class="primary">Keep flying</button>
+          <button id="open-poem">✎ Your poem</button>
           <button id="new-world">New world</button>
           <button id="gyro-toggle" class="hidden">Tilt steering: on</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="poem-view" class="hidden">
+      <div class="card fridge">
+        <h2>Your poem</h2>
+        <p class="sub">Written in flight, one word at a time.</p>
+        <div id="poem-door" class="door"></div>
+        <div class="door-tools">
+          <button id="poem-undo">↶ Undo word</button>
+          <button id="poem-line">↵ New line</button>
+          <button id="poem-share">Share / copy</button>
+          <button id="poem-image">Save image</button>
+        </div>
+        <div class="menu">
+          <button id="poem-close" class="primary">Keep flying</button>
+          <button id="poem-keep">Keep this poem &amp; start another</button>
+        </div>
+        <div id="poem-saved-wrap" class="hidden">
+          <h3>Kept poems</h3>
+          <ul id="poem-saved"></ul>
         </div>
       </div>
     </div>

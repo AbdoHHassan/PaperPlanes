@@ -8,7 +8,10 @@ import { Trail, WindStreaks, Motes, Puffs, Birds, TRAIL_RAINBOW, TRAIL_TIME } fr
 import { Rings, RING_TYPES } from './rings.js';
 import { Animals, SPECIES, SPECIES_KEYS } from './animals.js';
 import { Bursts, Feedback } from './fx.js';
-import { THEMES, THEME_ORDER } from './themes.js';
+import { THEMES, PORTAL_THEMES } from './themes.js';
+import { WordTiles } from './wordtiles.js';
+import { Poem } from './poem.js';
+import { offerWords, lineText, MOODS, POS_COLORS } from './words.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
 import { QUALITY } from './config.js';
@@ -67,6 +70,8 @@ const animals = new Animals(scene);
 world.animals = animals;
 const bursts = new Bursts(scene);
 const feedback = new Feedback(camera);
+const wordTiles = new WordTiles(scene);
+const poem = new Poem();
 
 const START = new THREE.Vector3(0, 42, -190);
 
@@ -103,7 +108,13 @@ function applyWorld(s, key, keepPlace = false) {
   world.setWorld(seed, key);
   rings.clear();
   animals.clear();
+  wordTiles.clear();
+  // In the poem world, words take over from most of the rings.
+  const poemWorld = key === 'ethereal';
+  rings.chainChance = poemWorld ? 0.1 : 0.35;
+  rings.wordGates = !poemWorld;
   applyThemeVisuals(THEMES[key]);
+  updatePoemUi(poemWorld);
   if (!keepPlace) plane.reset(START, 0);
   trails.forEach((t) => t.reset());
   $('seed').textContent = seed;
@@ -125,6 +136,10 @@ const state = {
   lastRing: -99,
   rainbow: 0,
   trick: 0,
+  mood: MOODS[Math.floor(Math.random() * MOODS.length)],
+  nextCluster: 0,
+  lineFreqs: [],
+  echoes: {}, // word resonances in progress: name -> seconds left
   time: 0,
   hudHidden: false,
   shake: 0,
@@ -255,14 +270,156 @@ function onRing({ ring, type, position }) {
   if (type === 'swift') state.shake = Math.max(state.shake, 0.35);
   if (type === 'prism') state.rainbow = 7;
   if (type === 'flip') plane.startTrick(state.trick++ % 2 === 0 ? 'loop' : 'roll');
-  if (def.portal) travel();
+  if (def.portal) {
+    if (ring.word) {
+      // A word portal: the word becomes part of your poem, and in you go.
+      catchWord(ring.word, position);
+      travel('ethereal');
+    } else travel();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Poem world: word constellations drift ahead; fly through one to catch it.
+
+function updatePoemUi(poemWorld = themeKey === 'ethereal') {
+  const show = poemWorld || !poem.isEmpty;
+  $('poem-strip').classList.toggle('hidden', !show);
+  $('poem-btn').classList.toggle('hidden', !show);
+  if (show) poem.render();
+}
+
+function tendWords(dt) {
+  if (themeKey !== 'ethereal' || state.mode !== 'flying') return;
+  const caught = wordTiles.update(dt, plane, camera);
+  if (caught) catchWord(caught.tile.word, caught.tile.group.position);
+  // Always keep a fresh handful of words somewhere ahead: the next cluster
+  // appears on the horizon as you reach the current one.
+  const ahead = wordTiles.aheadCluster(plane);
+  const near = ahead && ahead.tiles.some((t) => t.state === 'live' && t.group.position.distanceTo(plane.position) < 90);
+  const live = wordTiles.clusters.filter((c) => !c.done).length;
+  if ((!ahead || (near && live < 2)) && state.time > state.nextCluster) {
+    const words = offerWords(Math.random, {
+      lastPos: poem.lastPos,
+      mood: state.mood,
+      lineLength: poem.current.length,
+      avoid: poem.recent(),
+      count: window.innerWidth < 600 ? 3 : 4,
+    });
+    wordTiles.spawn(plane, words, (ahead ? 250 : 160) + plane.speed * 2);
+    state.nextCluster = state.time + 1.5;
+  }
+}
+
+function catchWord(word, position) {
+  const color = POS_COLORS[word.pos] ?? '#ffffff';
+  bursts.emit(position, plane.camForward, [color, '#ffffff', '#fff4d6'], 60, 4, 8);
+  feedback.haptic(18);
+  if (word.pos === 'break') {
+    const text = poem.newLine();
+    if (text) readLine(text);
+  } else {
+    poem.add(word);
+    state.lineFreqs.push(audio.word(word.pos, poem.current.length - 1));
+    feedback.popup(position, word.w, color, true);
+    // The mood drifts with what you choose, so imagery gathers without being forced.
+    if (word.moods.length && Math.random() < 0.6) state.mood = word.moods[0];
+    else if (Math.random() < 0.2) state.mood = MOODS[Math.floor(Math.random() * MOODS.length)];
+    resonate(word);
+  }
+  updatePoemUi();
+}
+
+/** A finished line is read back: shown large, with its notes replayed. */
+function readLine(text) {
+  const el = $('reading');
+  el.textContent = text;
+  el.classList.remove('show');
+  void el.offsetWidth;
+  el.classList.add('show');
+  audio.readLine(state.lineFreqs.filter(Boolean));
+  state.lineFreqs = [];
+  feedback.flash('#f3e8ff', 0.3);
+}
+
+// Some words echo into the world around you.
+const ECHOES = [
+  { name: 'moon', words: ['moon', 'orbit', 'satellite', 'luminous'] },
+  { name: 'rain', words: ['rain', 'river', 'sea', 'tide', 'flood', 'drown', 'pour', 'drowned', 'well', 'harbor'] },
+  { name: 'embers', words: ['fire', 'ember', 'flame', 'burn', 'burning', 'glow', 'molten', 'furnace', 'ash', 'smoke'] },
+  { name: 'petals', words: ['bloom', 'garden', 'seed', 'grow', 'tender', 'tenderness', 'sweet', 'love', 'joy'] },
+  { name: 'birds', words: ['bird', 'wings', 'fly', 'rise', 'weightless', 'sky'] },
+  { name: 'night', words: ['night', 'midnight', 'dusk', 'stars', 'dark', 'quiet', 'static', 'distance'] },
+  { name: 'gold', words: ['gold', 'golden', 'honey', 'sugar', 'sun', 'bright', 'holy', 'prayer', 'mercy'] },
+];
+const moonSprite = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(128, 128, 50, 128, 128, 128);
+  grd.addColorStop(0, 'rgba(255,252,240,1)');
+  grd.addColorStop(0.42, 'rgba(255,248,230,1)');
+  grd.addColorStop(0.47, 'rgba(255,240,220,0.35)');
+  grd.addColorStop(1, 'rgba(255,240,220,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 256, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, fog: false, depthWrite: false, opacity: 0 }));
+  sp.scale.setScalar(520);
+  sp.renderOrder = 0;
+  scene.add(sp);
+  return sp;
+})();
+
+function resonate(word) {
+  const echo = ECHOES.find((e) => e.words.includes(word.w));
+  if (!echo) return;
+  state.echoes[echo.name] = echo.name === 'moon' || echo.name === 'night' ? 30 : 12;
+  const p = plane.position;
+  if (echo.name === 'embers') bursts.emit(p, plane.camForward, ['#ffb35c', '#ff7a3c', '#ffe08a'], 120, 12, 5);
+  if (echo.name === 'gold') bursts.emit(p, plane.camForward, ['#ffe08a', '#fff4c2', '#f4c96b'], 110, 10, 7);
+  if (echo.name === 'petals') bursts.emit(p, plane.camForward, ['#f7c9dc', '#ffe3ef', '#e3cdf0'], 110, 12, 5);
+  if (echo.name === 'birds') {
+    birds.center.copy(p).addScaledVector(plane.camForward, 120);
+    birds.center.y = p.y + 15;
+  }
+}
+
+/** Fades echo effects in and out; runs every frame. */
+function tendEchoes(dt) {
+  const theme = THEMES[themeKey];
+  let motesOverride = null;
+  for (const k of Object.keys(state.echoes)) {
+    state.echoes[k] -= dt;
+    if (state.echoes[k] <= 0) delete state.echoes[k];
+  }
+  const e = state.echoes;
+  if (e.rain) motesOverride = { color: '#d6f1ff', size: 0.5, fall: 9, glow: true };
+  else if (e.embers) motesOverride = { color: '#ffb35c', size: 0.6, fall: -4, glow: true };
+  else if (e.petals) motesOverride = { color: '#ffc3dc', size: 0.7, fall: 1, glow: false };
+  else if (e.gold) motesOverride = { color: '#ffe08a', size: 0.6, fall: -1, glow: true };
+  const want = motesOverride ?? theme.motes;
+  if (motes.current !== want) {
+    motes.setTheme(want);
+    motes.current = want;
+  }
+  // Night deepens the stars; the moon rises opposite the sun.
+  const nightK = e.night ? Math.min(1, e.night / 3, (30 - e.night) / 3 + 0.2) : 0;
+  SKY.stars.value = theme.sky.stars + nightK * 1.2;
+  const moonK = e.moon ? Math.min(1, e.moon / 3, (30 - e.moon) / 2) : 0;
+  moonSprite.material.opacity += (moonK - moonSprite.material.opacity) * Math.min(1, dt * 2);
+  moonSprite.visible = moonSprite.material.opacity > 0.01;
+  if (moonSprite.visible) {
+    moonSprite.position.copy(camera.position).addScaledVector(tmpV.set(-SKY.sunDir.x, 0.35, -SKY.sunDir.z).normalize(), 3000);
+  }
 }
 
 // Portals: white-out, rebuild the land in another theme, fly on.
-async function travel() {
+async function travel(target = null) {
   if (state.mode !== 'flying') return;
-  const others = THEME_ORDER.filter((k) => k !== themeKey);
-  const next = others[Math.floor(Math.random() * others.length)];
+  const others = PORTAL_THEMES.filter((k) => k !== themeKey);
+  const next = target ?? others[Math.floor(Math.random() * others.length)];
   feedback.whiteout(true);
   await new Promise((r) => setTimeout(r, 500));
   state.mode = 'loading';
@@ -273,7 +430,7 @@ async function travel() {
   chaseCamera(0, true);
   state.mode = 'flying';
   feedback.whiteout(false);
-  showToast(`✦ ${THEMES[next].name}`);
+  showToast(next === 'ethereal' ? '✦ Dreaming Hours · fly through words to write a poem' : `✦ ${THEMES[next].name}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -381,6 +538,8 @@ function frame(now) {
   } else {
     animals.update(dt, plane);
   }
+  tendWords(dt);
+  tendEchoes(dt);
   state.rainbow = Math.max(0, state.rainbow - dt);
   TRAIL_RAINBOW.value = Math.min(1, state.rainbow);
   TRAIL_TIME.value = state.time;
@@ -437,6 +596,20 @@ function frame(now) {
 // ---------------------------------------------------------------------------
 // UI wiring
 
+async function startPoem() {
+  if (state.mode !== 'title') return;
+  // Set the mood before the new world loads, then take off into it.
+  audio.start();
+  state.mode = 'loading';
+  $('title').classList.add('fade');
+  applyWorld(Math.floor(Math.random() * 1e6) + 1, 'ethereal');
+  await buildAround();
+  chaseCamera(0, true);
+  state.mode = 'title';
+  start();
+  showToast('✦ Dreaming Hours · fly through words to write a poem');
+}
+
 function start() {
   if (state.mode !== 'title') return;
   // Ask for motion access straight from the tap (required on iOS).
@@ -473,11 +646,46 @@ function togglePause() {
   } else if (state.mode === 'paused') {
     state.mode = 'flying';
     $('paused').classList.add('hidden');
+    $('poem-view').classList.add('hidden');
     audio.ctx?.resume();
   }
 }
 
 $('start').addEventListener('click', start);
+$('start-poem').addEventListener('click', startPoem);
+
+// Poem view ("the fridge door").
+function openPoem() {
+  if (state.mode === 'flying') togglePause(true);
+  poem.renderDoor();
+  $('paused').classList.add('hidden');
+  $('poem-view').classList.remove('hidden');
+}
+function closePoem() {
+  $('poem-view').classList.add('hidden');
+  if (state.mode === 'paused') togglePause();
+}
+$('poem-btn').addEventListener('click', openPoem);
+$('open-poem').addEventListener('click', openPoem);
+$('poem-close').addEventListener('click', closePoem);
+$('poem-undo').addEventListener('click', () => (poem.undo(), poem.renderDoor()));
+$('poem-line').addEventListener('click', () => {
+  const t = poem.newLine();
+  if (t) state.lineFreqs = [];
+  poem.renderDoor();
+});
+$('poem-keep').addEventListener('click', () => {
+  if (poem.isEmpty) return;
+  poem.keep();
+  poem.reset();
+  poem.renderDoor();
+  showToast('Poem kept. A blank fridge door awaits.');
+});
+$('poem-share').addEventListener('click', async () => {
+  const r = await poem.share();
+  showToast(r === 'copied' ? 'Poem copied' : r === 'shared' ? 'Shared' : 'Could not share');
+});
+$('poem-image').addEventListener('click', () => poem.downloadImage());
 $('resume').addEventListener('click', togglePause);
 $('new-world').addEventListener('click', async () => {
   $('paused').classList.add('hidden');
@@ -512,7 +720,16 @@ $('pause-btn').addEventListener('click', togglePause);
 screen.orientation?.addEventListener?.('change', () => input.recenter());
 window.addEventListener('orientationchange', () => input.recenter());
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Enter' || e.code === 'Space') start();
+  if (state.mode === 'title' && (e.code === 'Enter' || e.code === 'Space')) start();
+  else if (state.mode === 'flying' && e.code === 'Enter' && !poem.isEmpty) {
+    const t = poem.newLine();
+    if (t) readLine(t);
+  }
+  if (state.mode === 'flying' && e.code === 'Backspace') {
+    poem.undo();
+    updatePoemUi();
+  }
+  if (e.code === 'KeyO') ($('poem-view').classList.contains('hidden') ? openPoem() : closePoem());
   if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
   if (e.code === 'KeyM') audio.setMuted(!audio.muted);
   if (e.code === 'KeyI') input.invertY = !input.invertY;
@@ -548,6 +765,11 @@ async function buildAround(onProgress) {
 
 async function boot() {
   const bar = $('progress');
+  // Word tiles are drawn into canvases, so the serif must be ready first.
+  await Promise.race([
+    document.fonts?.load('600 96px Fraunces').catch(() => {}),
+    new Promise((r) => setTimeout(r, 2500)),
+  ]);
   const capacity = (mat) => (mat.startsWith('Bark') || mat.startsWith('Leaves_') ? 14000 : 5000);
   await foliage.load(MODEL_NAMES, `${import.meta.env.BASE_URL}models/`, capacity, (p) => (bar.style.width = `${p * 80}%`));
 
@@ -558,10 +780,11 @@ async function boot() {
   state.mode = 'title';
   $('loading').classList.add('hidden');
   $('start').classList.remove('hidden');
+  $('start-poem').classList.remove('hidden');
 }
 
 requestAnimationFrame(frame);
-window.__paperplanes = { state, renderer, plane, world, camera, foliage, input, chaseCamera, rings, animals, onRing, travel };
+window.__paperplanes = { state, renderer, plane, world, camera, foliage, input, chaseCamera, rings, animals, onRing, travel, wordTiles, poem, catchWord, tendWords };
 boot().catch((err) => {
   console.error(err);
   document.querySelector('#loading .hint').textContent = 'Something went wrong loading the scene. Check the console.';

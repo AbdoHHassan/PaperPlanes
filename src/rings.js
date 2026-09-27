@@ -1,11 +1,17 @@
 import * as THREE from 'three';
 import { heightAt, forestAt, getSeed, WATER_LEVEL } from './terrain.js';
 import { CRUISE, MAX_TURN_RATE, applyGust, stepSpeed } from './plane.js';
+import { WORDS } from './words.js';
+import { makeTile } from './wordtiles.js';
+
+// Words that open the way into the poem world.
+const GATE_WORDS = WORDS.filter((w) => w.pos === 'noun' || w.pos === 'adj');
 import { mulberry32, hash2 } from './noise.js';
 import { SOFT_SPRITE } from './effects.js';
 import { CHUNK } from './scatter.js';
 
 const RADIUS = 6;
+const rel0 = (self, m, plane) => self._tmp.subVectors(m.position, plane.position).length();
 const _Z = new THREE.Vector3(0, 0, 1);
 const _spin = new THREE.Quaternion();
 
@@ -226,6 +232,8 @@ export class Rings {
     this.collected = new Set();
     this._tmp = new THREE.Vector3();
     this.time = 0;
+    this.chainChance = 0.35; // lower in the poem world, where words take over
+    this.wordGates = true; // some portals carry a word into the poem world
   }
 
   _pickType(r) {
@@ -243,7 +251,7 @@ export class Rings {
     const guide = cx === 0 && cz === 0; // a first chain right in front of the start
     const nearSpawn = Math.hypot(cx, cz) < 1.5;
     if (nearSpawn && !guide) return list;
-    const chains = (r() < 0.35 ? 1 : 0) + (guide ? 1 : 0);
+    const chains = (r() < this.chainChance ? 1 : 0) + (guide ? 1 : 0);
     for (let c = 0; c < chains; c++) {
       let x = cx * CHUNK + r() * CHUNK;
       let z = cz * CHUNK + r() * CHUNK;
@@ -278,12 +286,14 @@ export class Rings {
       const id = `${cx},${cz},portal`;
       const y = Math.max(heightAt(x, z), WATER_LEVEL) + 26;
       const a = r() * Math.PI * 2;
-      if (!this.collected.has(id)) list.push(this._make(id, 'portal', x, y, z, [Math.sin(a), 0, Math.cos(a)]));
+      // Half of all portals carry a word and lead into the poem world.
+      const word = this.wordGates && r() < 0.5 ? GATE_WORDS[Math.floor(r() * GATE_WORDS.length)] : null;
+      if (!this.collected.has(id)) list.push(this._make(id, 'portal', x, y, z, [Math.sin(a), 0, Math.cos(a)], word));
     }
     return list;
   }
 
-  _make(id, type, x, y, z, normal) {
+  _make(id, type, x, y, z, normal, word = null) {
     const t = RING_TYPES[type];
     const geo = t.portal ? this.portalGeo : t.rainbow ? this.rainbowGeo : this.geo;
     const mat = t.shifter ? this.mats.gold.clone() : this.mats[type];
@@ -305,6 +315,11 @@ export class Rings {
     if (t.portal) {
       const disc = new THREE.Mesh(new THREE.CircleGeometry(RADIUS * 1.3, 32), this.portalDiscMat);
       mesh.add(disc);
+      if (word) {
+        // A word magnet hangs in the middle of the swirl.
+        // Tiles are readable from both sides and draw over the swirl.
+        mesh.add(makeTile(word, 0.7));
+      }
       const beam = new THREE.Mesh(this.beamGeo, this.beamMat);
       beam.position.set(x, Math.max(heightAt(x, z), WATER_LEVEL), z);
       this.scene.add(beam);
@@ -318,6 +333,7 @@ export class Rings {
       dying: 0,
       radius: RADIUS * (t.portal ? 1.35 : 1),
       shift: Math.floor(Math.random() * SHIFT_CYCLE.length),
+      word,
     };
     this.active.add(ring);
     return ring;
@@ -376,6 +392,8 @@ export class Rings {
           ring.glowMat.color.set(next.glow);
         }
       }
+      // The light beam is for finding portals from afar; hide it up close.
+      if (m.userData.beam) m.userData.beam.visible = rel0(this, m, plane) > 110;
       if (!t.portal) {
         // Gentle spin around the ring's own axis.
         m.quaternion.copy(m.userData.baseQuat).multiply(_spin.setFromAxisAngle(_Z, Math.sin(ring.t * 0.8) * 0.3));

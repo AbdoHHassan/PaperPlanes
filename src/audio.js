@@ -172,6 +172,30 @@ export class Audio {
     this.ring('gold');
   }
 
+  /**
+   * A word caught: a soft mallet note. Each part of speech has its own
+   * register, and the pitch walks a pentatonic scale as the line grows.
+   */
+  word(pos, index = 0) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const scale = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21];
+    const base = { noun: 293.66, verb: 329.63, adj: 392.0, art: 220.0, pron: 246.94, prep: 261.63, conj: 196.0, adv: 349.23, suffix: 440.0 }[pos] ?? 293.66;
+    const f = base * Math.pow(2, scale[index % scale.length] / 12);
+    this._tone(f, t, { type: 'sine', vol: 0.14, decay: 2.2 });
+    this._tone(f * 2.01, t, { type: 'sine', vol: 0.04, decay: 1.1 });
+    this._tone(f * 3.99, t + 0.01, { type: 'triangle', vol: 0.015, decay: 0.5 });
+    return f;
+  }
+
+  /** A finished line is played back as a slow, rising arpeggio. */
+  readLine(freqs) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    freqs.forEach((f, i) => this._tone(f, t + 0.35 + i * 0.28, { type: 'sine', vol: 0.1, decay: 2.6 }));
+    [146.83, 220.0, 293.66].forEach((f) => this._tone(f, t, { type: 'triangle', vol: 0.05, decay: 4.5, attack: 0.8 }));
+  }
+
   discover() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
