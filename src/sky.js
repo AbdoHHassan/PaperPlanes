@@ -7,7 +7,18 @@ export const SKY = {
   bottom: new THREE.Color('#e9f2e4'),
   sunColor: new THREE.Color('#fff0cf'),
   sunDir: new THREE.Vector3(-0.55, 0.42, 0.72).normalize(),
+  stars: { value: 0 },
 };
+
+/** Copies a theme's sky colours into the shared SKY values (uniforms follow). */
+export function applySkyTheme(theme) {
+  SKY.top.set(theme.sky.top);
+  SKY.horizon.set(theme.sky.horizon);
+  SKY.bottom.set(theme.sky.bottom);
+  SKY.sunColor.set(theme.sun.color);
+  SKY.sunDir.set(...theme.sun.dir).normalize();
+  SKY.stars.value = theme.sky.stars;
+}
 
 export function createSky() {
   const mat = new THREE.ShaderMaterial({
@@ -21,6 +32,7 @@ export function createSky() {
       uSunDir: { value: SKY.sunDir },
       uSunColor: { value: SKY.sunColor },
       uTime: { value: 0 },
+      uStars: SKY.stars,
     },
     vertexShader: /* glsl */ `
       varying vec3 vDir;
@@ -32,7 +44,9 @@ export function createSky() {
     fragmentShader: /* glsl */ `
       uniform vec3 uTop, uHorizon, uBottom, uSunDir, uSunColor;
       uniform float uTime;
+      uniform float uStars;
       varying vec3 vDir;
+      float hash3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453); }
 
       float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float noise(vec2 p) {
@@ -52,6 +66,15 @@ export function createSky() {
         float streak = noise(uv * vec2(1.0, 7.0)) * noise(uv * 2.3 + 3.0);
         col = mix(col, vec3(1.0), smoothstep(0.35, 0.8, streak) * smoothstep(0.05, 0.35, h) * 0.45);
 
+        if (uStars > 0.0) {
+          vec3 sp = d * 220.0;
+          vec3 cell = floor(sp);
+          float h = hash3(cell);
+          float star = step(0.996, h) * smoothstep(0.32, 0.0, length(fract(sp) - 0.5));
+          star *= smoothstep(0.02, 0.25, h > 0.0 ? d.y : 0.0) * (0.65 + 0.35 * sin(uTime * 2.0 + h * 300.0));
+          col += vec3(0.9, 0.95, 1.0) * star * uStars * 1.4;
+        }
+
         float s = max(dot(d, uSunDir), 0.0);
         col += uSunColor * (pow(s, 900.0) * 3.0 + pow(s, 40.0) * 0.35 + pow(s, 6.0) * 0.12);
         gl_FragColor = vec4(col, 1.0);
@@ -70,13 +93,13 @@ export class Clouds {
   constructor(scene, count = 42) {
     this.group = new THREE.Group();
     this.radius = 1600;
-    const mat = new THREE.MeshStandardMaterial({
+    const mat = (this.material = new THREE.MeshStandardMaterial({
       color: '#ffffff',
       emissive: '#dfe9f2',
       emissiveIntensity: 0.45,
       flatShading: true,
       roughness: 1,
-    });
+    }));
     const r = mulberry32(99);
     const geos = [];
     for (let g = 0; g < 6; g++) geos.push(this._cloudGeo(r));

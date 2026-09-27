@@ -71,8 +71,8 @@ button#start:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(3
 .controls b { display: inline-block; min-width: 52px; color: #c9772a; }
 
 #hud { position: fixed; inset: 0; pointer-events: none; }
+#hud .top-left { position: absolute; top: 18px; left: 20px; display: flex; flex-direction: column; gap: 8px; }
 #hud .counter {
-  position: absolute; top: 18px; left: 20px;
   display: flex; align-items: center; gap: 10px;
   font: 700 22px 'Nunito', sans-serif; color: #fff;
   text-shadow: 0 2px 8px rgba(0, 40, 70, 0.35);
@@ -145,3 +145,62 @@ kbd {
   max-width: calc(100vw - 32px); text-align: center;
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* Ring feedback */
+#flash {
+  position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 5;
+  background: radial-gradient(ellipse at center, transparent 45%, var(--c, #fff) 130%);
+}
+#flash.solid { background: var(--c, #fff); }
+#popups { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 6; }
+.popup {
+  position: absolute; transform: translate(-50%, -50%);
+  font: 800 20px 'Nunito', sans-serif; color: var(--c, #fff); white-space: nowrap;
+  text-shadow: 0 2px 10px rgba(0, 30, 60, 0.45), 0 0 18px var(--c, #fff);
+  animation: float-up 1.3s ease-out forwards;
+}
+.popup.big { font-size: 28px; }
+@keyframes float-up {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(0.6); }
+  15% { opacity: 1; transform: translate(-50%, -60%) scale(1.15); }
+  30% { transform: translate(-50%, -70%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -190%) scale(1); }
+}
+.gust { width: 90px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.25); overflow: hidden; }
+#gust-bar {
+  height: 100%; width: 100%; transform-origin: left; transform: scaleX(0);
+  background: linear-gradient(90deg, #6fd8ff, #ffffff);
+}
+.paws { font: 700 15px 'Nunito', sans-serif; color: #fff; text-shadow: 0 2px 8px rgba(0, 40, 70, 0.35); }
+.paws.pop { animation: pop 0.6s ease; }
+.combo {
+  position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
+  font: 700 16px 'Nunito', sans-serif; color: #fff; letter-spacing: 0.03em;
+  padding: 6px 14px; border-radius: 999px; background: rgba(255, 150, 60, 0.35);
+  backdrop-filter: blur(4px); text-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+  opacity: 0; transition: opacity 0.4s;
+}
+.combo.show { opacity: 1; }
+.combo b { font-size: 20px; }
+.combo.pop { animation: combo-pop 0.4s ease; }
+@keyframes combo-pop { 40% { transform: translateX(-50%) scale(1.25); } }
+
+/* Field journal */
+.card h3 { font-family: 'Fraunces', Georgia, serif; font-weight: 600; margin: 4px 0 8px; font-size: 16px; }
+#journal {
+  list-style: none; padding: 0; margin: 0 0 18px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+}
+#journal li {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font-size: 10.5px; font-weight: 700; opacity: 0.4; padding: 6px 2px; border-radius: 10px;
+  background: rgba(35, 49, 63, 0.05); line-height: 1.2; text-align: center;
+}
+#journal li span { font-size: 22px; }
+#journal li.found { opacity: 1; background: rgba(242, 169, 59, 0.15); }
+#paused .card.small { max-width: 360px; }
+
+.paws.near { animation: sniff 1.2s ease-in-out infinite; }
+@keyframes sniff { 50% { text-shadow: 0 0 14px #ffe9a8, 0 0 4px #fff; transform: scale(1.08); } }
+.paws::after { content: ''; }
+.paws.near::after { content: ' nearby'; font-size: 12px; opacity: 0.85; }

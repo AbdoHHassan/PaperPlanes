@@ -1,5 +1,6 @@
 // Pure terrain maths (no three.js) so it can run in both the page and workers.
 import { createNoise2D, fbm, smoothstep, lerp } from './noise.js';
+import { THEMES } from './themes.js';
 
 export const WATER_LEVEL = 0;
 
@@ -70,21 +71,20 @@ export function hexToLinear(hex) {
   return [srgbToLinear(((n >> 16) & 255) / 255), srgbToLinear(((n >> 8) & 255) / 255), srgbToLinear((n & 255) / 255)];
 }
 
-const PAL = Object.fromEntries(
-  Object.entries({
-    sand: '#e8d69a',
-    wetSand: '#c9b27a',
-    grassA: '#8fcf4e',
-    grassB: '#6fb83f',
-    meadowGold: '#d8c25a',
-    autumnA: '#e0a23a',
-    autumnB: '#d9772c',
-    forestFloor: '#5a9a3a',
-    rock: '#a9ab9b',
-    rockDark: '#8d9183',
-    snow: '#f4f6f8',
-  }).map(([k, v]) => [k, hexToLinear(v)]),
-);
+let PAL = {};
+let theme = THEMES.meadow;
+let themeKey = 'meadow';
+
+/** Switches the colour palette used for new terrain and vegetation. */
+export function setTheme(key) {
+  themeKey = THEMES[key] ? key : 'meadow';
+  theme = THEMES[themeKey];
+  PAL = {};
+  for (const [k, v] of Object.entries(theme.ground)) PAL[k] = typeof v === 'string' ? hexToLinear(v) : v;
+}
+setTheme('meadow');
+export const getTheme = () => theme;
+export const getThemeKey = () => themeKey;
 
 const mix = (out, c, t) => {
   out[0] += (c[0] - out[0]) * t;
@@ -113,7 +113,7 @@ function colorAt(x, y, z, slope, out) {
   mix(set(tmp2, PAL.rock), PAL.rockDark, v);
   mix(out, tmp2, Math.min(1, rocky));
 
-  const snow = smoothstep(175, 205, y + v * 15) * (1 - smoothstep(0.9, 1.3, slope));
+  const snow = smoothstep(PAL.snowLine, PAL.snowLine + 30, y + v * 15) * (1 - smoothstep(0.9, 1.3, slope));
   return mix(out, PAL.snow, snow);
 }
 

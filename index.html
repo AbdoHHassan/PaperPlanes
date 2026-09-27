@@ -12,9 +12,16 @@
   </head>
   <body>
     <canvas id="scene"></canvas>
+    <div id="flash"></div>
+    <div id="popups"></div>
 
     <div id="hud" class="hidden">
-      <div class="counter"><span class="ring-icon"></span><span id="score">0</span></div>
+      <div class="top-left">
+        <div class="counter"><span class="ring-icon"></span><span id="score">0</span></div>
+        <div class="gust"><div id="gust-bar"></div></div>
+        <div class="paws">🐾 <span id="paws">0/8</span></div>
+      </div>
+      <div id="combo" class="combo">Combo <b>×<span id="combo-n">2</span></b></div>
       <div id="pointer" class="pointer"></div>
       <div class="stats"><span id="alt">0</span> m &nbsp;·&nbsp; <span id="spd">0</span> km/h</div>
       <div class="keys"><kbd>M</kbd> sound &nbsp; <kbd>I</kbd> invert &nbsp; <kbd>H</kbd> hide &nbsp; <kbd>P</kbd> pause</div>
@@ -35,7 +42,8 @@
         <ul class="controls">
           <li><b>Steer</b> move the mouse · WASD / arrows · tilt your phone</li>
           <li><b>Gust</b> hold click · Space · touch and hold</li>
-          <li><b>Rings</b> fly through the glowing rings for a gust of wind</li>
+          <li><b>Rings</b> gold gusts · <span style="color:#3ab8ff">⚡ swift</span> · <span style="color:#d05ad0">★ prism</span> · <span style="color:#ff5fa0">↻ flip</span> · <span style="color:#9a6bff">◎ portal</span></li>
+          <li><b>Explore</b> find all 8 animals hiding in the landscape</li>
         </ul>
       </div>
     </div>
@@ -43,7 +51,9 @@
     <div id="paused" class="hidden">
       <div class="card small">
         <h2>Paused</h2>
-        <p class="sub">World <b>#<span id="seed"></span></b> · share the URL to share this world</p>
+        <p class="sub"><b id="world-name">Summer Meadows</b> #<span id="seed"></span> · share the URL to share this world</p>
+        <h3>Field journal</h3>
+        <ul id="journal"></ul>
         <div class="menu">
           <button id="resume" class="primary">Keep flying</button>
           <button id="new-world">New world</button>

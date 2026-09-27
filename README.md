@@ -7,6 +7,27 @@ and thread the glowing wind rings to pick up speed.
 Built with [three.js](https://threejs.org) and [Vite](https://vite.dev).
 Nature models are the Stylized Nature MegaKit by [Quaternius](https://quaternius.com) (CC0).
 
+## What's in the sky
+
+| Ring | What it does |
+|---|---|
+| Gold | +1 and a short gust of speed |
+| ⚡ Swift (blue) | A strong 3-second speed burst |
+| ★ Prism (rainbow) | Worth 5, and turns your trails rainbow for a while |
+| ↻ Flip (pink) | Your plane does a loop-the-loop or a barrel roll |
+| ? Shifter | Cycles through the colours above; you get whichever is showing |
+| ◎ Portal (purple, with a light beam) | Takes you to a different world: Golden Hour, Winter Hush, Blossom Valley or Firefly Twilight |
+
+Chain rings within a few seconds for a combo multiplier (up to ×5). Every ring
+gives feedback: a coloured spark burst, a floating label, an edge flash, its
+own sound and a vibration on phones.
+
+There are also 8 animals to find, each in its own habitat: deer, foxes and
+rabbits in meadows, bears in deep forest, goats on steep slopes, ducks and
+leaping koi on lakes, and eagles circling the peaks. Fly close to one to add it
+to your field journal (in the pause menu). The paw counter glows when an
+undiscovered animal is nearby, and the journal is remembered between visits.
+
 ## Running it
 
 ```bash
@@ -45,5 +66,9 @@ Add `?low` or `?high` to the URL to force a quality tier (touch devices default 
 | `src/plane.js` | The paper plane mesh (with a canvas notebook-paper texture) and an arcade glider model: bank to turn, trade height for speed, stall recovery, soft bounces off ground and water. |
 | `src/sky.js` | Gradient sky with sun and cirrus, drifting low-poly clouds, and animated low-poly water. |
 | `src/effects.js` | Wingtip trails, wind streaks, pollen motes, splash puffs, and a flock of birds. |
-| `src/rings.js` | Chains of wind rings that suggest routes through the landscape. |
+| `src/rings.js` | Ring types and their layout. Chains are planned from the flight model: rings are spaced by the speed you'll actually have there (including the previous ring's gust), turns stay under half of full bank and shrink as speed rises, climbs and descents are capped at 9° and 12°, and heights clear the ground and treetops without needless dips. |
+| `scripts/ring-flight-test.cjs` | Simulated pilot that flies every chain with the real flight model and reports the hit rate; use it when tuning ring layout or handling. |
+| `src/fx.js` | Ring feedback: spark bursts, floating labels, screen flash, haptics. |
+| `src/animals.js` | Procedural low-poly animals: habitats, behaviours (grazing, fleeing, hopping, swimming, leaping, soaring) and discovery. |
+| `src/themes.js` | The five world themes: sky, light, fog, terrain and foliage palettes, and ambient particles. |
 | `src/audio.js` | Synthesised wind, a slow ambient pad and pentatonic chimes via WebAudio. No audio files are used. |

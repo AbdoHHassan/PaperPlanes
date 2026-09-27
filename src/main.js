@@ -1,11 +1,14 @@
 import * as THREE from 'three';
 import { Foliage, windUniforms } from './foliage.js';
 import { World, MODEL_NAMES } from './world.js';
-import { heightAt, setSeed, WATER_LEVEL } from './terrain.js';
+import { heightAt, setSeed, setTheme, WATER_LEVEL } from './terrain.js';
 import { PaperPlane } from './plane.js';
-import { SKY, createSky, Clouds, createWater } from './sky.js';
-import { Trail, WindStreaks, Motes, Puffs, Birds } from './effects.js';
-import { Rings } from './rings.js';
+import { SKY, createSky, Clouds, createWater, applySkyTheme } from './sky.js';
+import { Trail, WindStreaks, Motes, Puffs, Birds, TRAIL_RAINBOW, TRAIL_TIME } from './effects.js';
+import { Rings, RING_TYPES } from './rings.js';
+import { Animals, SPECIES, SPECIES_KEYS } from './animals.js';
+import { Bursts, Feedback } from './fx.js';
+import { THEMES, THEME_ORDER } from './themes.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
 import { QUALITY } from './config.js';
@@ -60,24 +63,57 @@ const puffs = new Puffs(scene);
 const birds = new Birds(scene);
 const audio = new Audio();
 const input = new Input(canvas);
+const animals = new Animals(scene);
+world.animals = animals;
+const bursts = new Bursts(scene);
+const feedback = new Feedback(camera);
 
 const START = new THREE.Vector3(0, 42, -190);
 
-// Every visit is a new world, unless a ?seed= is shared in the URL.
+// Every visit is a new world, unless ?seed= (and ?world= for the theme) is
+// shared in the URL.
 const params = new URLSearchParams(location.search);
 let seed = Number(params.get('seed')) || Math.floor(Math.random() * 1e6) + 1;
-function applySeed(s) {
+let themeKey = THEMES[params.get('world')] ? params.get('world') : 'meadow';
+
+function applyThemeVisuals(theme) {
+  applySkyTheme(theme);
+  scene.fog.color.copy(SKY.horizon);
+  scene.fog.near = QUALITY.fogFar * theme.fog.near;
+  scene.fog.far = QUALITY.fogFar * theme.fog.far;
+  scene.background.copy(SKY.horizon);
+  hemi.color.set(theme.hemi.sky);
+  hemi.groundColor.set(theme.hemi.ground);
+  hemi.intensity = theme.hemi.intensity;
+  sun.color.set(theme.sun.color);
+  sun.intensity = theme.sun.intensity;
+  water.material.color.set(theme.water);
+  clouds.material.color.set(theme.clouds.color);
+  clouds.material.emissive.set(theme.clouds.emissive);
+  motes.setTheme(theme.motes);
+  renderer.toneMappingExposure = theme.exposure;
+}
+
+/** Regenerates the world. `keepPlace` is used by portals so you fly on. */
+function applyWorld(s, key, keepPlace = false) {
   seed = s;
+  themeKey = key;
   setSeed(seed);
-  world.setSeed(seed);
+  setTheme(key);
+  world.setWorld(seed, key);
   rings.clear();
-  plane.reset(START, 0);
+  animals.clear();
+  applyThemeVisuals(THEMES[key]);
+  if (!keepPlace) plane.reset(START, 0);
   trails.forEach((t) => t.reset());
   $('seed').textContent = seed;
+  $('world-name').textContent = THEMES[key].name;
   params.set('seed', seed);
+  if (key === 'meadow') params.delete('world');
+  else params.set('world', key);
   history.replaceState(null, '', `${location.pathname}?${params}`);
 }
-applySeed(seed);
+applyWorld(seed, themeKey);
 
 // ---------------------------------------------------------------------------
 // State
@@ -85,6 +121,10 @@ applySeed(seed);
 const state = {
   mode: 'loading', // loading | title | flying | paused
   score: 0,
+  combo: 0,
+  lastRing: -99,
+  rainbow: 0,
+  trick: 0,
   time: 0,
   hudHidden: false,
   shake: 0,
@@ -106,7 +146,7 @@ const tmpProj = new THREE.Vector3();
 
 function chaseCamera(dt, snap = false) {
   // Offset behind the plane, pitched a little with it.
-  tmpE.set(-plane.pitch * 0.45, plane.yaw, 0);
+  tmpE.set(-plane.camPitch * 0.45, plane.yaw, 0);
   tmpQ.setFromEuler(tmpE);
   // Tall (portrait) screens see less sideways, so sit further back.
   const portrait = Math.max(1, 1 / camera.aspect) ** 0.6;
@@ -117,11 +157,11 @@ function chaseCamera(dt, snap = false) {
   const ground = Math.max(heightAt(camPos.x, camPos.z), WATER_LEVEL + 0.5);
   camPos.y = Math.max(camPos.y, ground + 1.2);
 
-  tmpV.copy(plane.position).addScaledVector(plane.forward, 9).setY(plane.position.y + plane.forward.y * 9 + 0.6);
+  tmpV.copy(plane.position).addScaledVector(plane.camForward, 9).setY(plane.position.y + plane.camForward.y * 9 + 0.6);
   camLook.lerp(tmpV, snap ? 1 : 1 - Math.exp(-dt * 8));
 
   // Lean the horizon a little into turns.
-  tmpAxis.copy(plane.forward).setY(0).normalize();
+  tmpAxis.copy(plane.camForward).setY(0).normalize();
   tmpLean.set(0, 1, 0).applyAxisAngle(tmpAxis, plane.roll * 0.25);
   camUp.lerp(tmpLean, snap ? 1 : 1 - Math.exp(-dt * 3)).normalize();
 
@@ -133,7 +173,7 @@ function chaseCamera(dt, snap = false) {
   }
   camera.up.copy(camUp);
   camera.lookAt(camLook);
-  const fov = 60 + (portrait - 1) * 12 + THREE.MathUtils.clamp((plane.speed - plane.cruise) * 0.45, -4, 18);
+  const fov = 60 + (portrait - 1) * 12 + plane.gustFraction * 8 + THREE.MathUtils.clamp((plane.speed - plane.cruise) * 0.45, -4, 18);
   camera.fov += (fov - camera.fov) * (1 - Math.exp(-dt * 3));
   camera.updateProjectionMatrix();
 }
@@ -152,7 +192,7 @@ function titleCamera(dt) {
 
 // Gentle autopilot for the title screen: meander and hold altitude.
 function autopilot() {
-  const ground = Math.max(heightAt(plane.position.x + plane.forward.x * 60, plane.position.z + plane.forward.z * 60), 0);
+  const ground = Math.max(heightAt(plane.position.x + plane.camForward.x * 60, plane.position.z + plane.camForward.z * 60), 0);
   const want = ground + 45;
   return {
     x: Math.sin(state.time * 0.13) * 0.35,
@@ -170,7 +210,99 @@ const hud = {
   spd: $('spd'),
   pointer: $('pointer'),
   counter: document.querySelector('.counter'),
+  combo: $('combo'),
+  comboN: $('combo-n'),
+  gust: $('gust-bar'),
+  paws: $('paws'),
+  pawsBox: document.querySelector('.paws'),
 };
+
+// ---------------------------------------------------------------------------
+// Rings: every type gives a gust, special ones add a twist.
+
+const RAINBOW = ['#ff5f6d', '#ffc371', '#fff36b', '#6bff95', '#6bd6ff', '#9a6bff', '#ff6bd6'];
+const HAPTICS = { gold: 15, swift: [20, 40, 30], prism: [15, 30, 15, 30, 15], flip: 40, portal: [60, 40, 120] };
+
+function onRing({ ring, type, position }) {
+  const def = RING_TYPES[type];
+  // Chain rings within a few seconds of each other to build a combo.
+  state.combo = state.time - state.lastRing < 4.5 ? state.combo + 1 : 1;
+  state.lastRing = state.time;
+  const mult = Math.min(state.combo, 5);
+  const points = def.points * mult;
+  state.score += points;
+  hud.score.textContent = state.score;
+  hud.counter.classList.remove('pop');
+  void hud.counter.offsetWidth;
+  hud.counter.classList.add('pop');
+
+  if (def.boost > 0) plane.gustFor(def.boost, def.strength);
+  const colors = def.rainbow ? RAINBOW : [def.color, def.glow, '#ffffff'];
+  bursts.emit(position, ring.normal, colors, def.rainbow ? 140 : type === 'gold' ? 60 : 100, ring.radius, def.portal ? 22 : 14);
+  feedback.flash(def.rainbow ? '#ff9bf0' : def.glow, type === 'gold' ? 0.22 : 0.45);
+  feedback.haptic(HAPTICS[type] ?? 15);
+  audio.ring(type, state.combo);
+
+  const label = type === 'gold' ? `+${points}` : `${def.label}${mult > 1 ? ` +${points}` : ''}`;
+  feedback.popup(position, label, def.rainbow ? '#ffffff' : def.glow, type !== 'gold');
+  if (state.combo >= 2) {
+    hud.comboN.textContent = state.combo;
+    hud.combo.classList.remove('pop');
+    void hud.combo.offsetWidth;
+    hud.combo.classList.add('show', 'pop');
+  }
+
+  if (type === 'swift') state.shake = Math.max(state.shake, 0.35);
+  if (type === 'prism') state.rainbow = 7;
+  if (type === 'flip') plane.startTrick(state.trick++ % 2 === 0 ? 'loop' : 'roll');
+  if (def.portal) travel();
+}
+
+// Portals: white-out, rebuild the land in another theme, fly on.
+async function travel() {
+  if (state.mode !== 'flying') return;
+  const others = THEME_ORDER.filter((k) => k !== themeKey);
+  const next = others[Math.floor(Math.random() * others.length)];
+  feedback.whiteout(true);
+  await new Promise((r) => setTimeout(r, 500));
+  state.mode = 'loading';
+  applyWorld(Math.floor(Math.random() * 1e6) + 1, next, true);
+  await buildAround();
+  const ground = Math.max(heightAt(plane.position.x, plane.position.z), WATER_LEVEL);
+  plane.position.y = Math.max(plane.position.y, ground + 35);
+  chaseCamera(0, true);
+  state.mode = 'flying';
+  feedback.whiteout(false);
+  showToast(`✦ ${THEMES[next].name}`);
+}
+
+// ---------------------------------------------------------------------------
+// Animals
+
+function updatePaws() {
+  hud.paws.textContent = `${animals.discovered.size}/${SPECIES_KEYS.length}`;
+}
+
+function onDiscover(a) {
+  const sp = SPECIES[a.kind];
+  audio.discover();
+  feedback.haptic([20, 60, 20]);
+  feedback.popup(a.group.position, `${sp.emoji} ${sp.name}!`, '#ffe9a8', true);
+  showToast(`New animal: ${sp.emoji} ${sp.name} · ${animals.discovered.size}/${SPECIES_KEYS.length} found`);
+  updatePaws();
+  const paw = document.querySelector('.paws');
+  paw.classList.remove('pop');
+  void paw.offsetWidth;
+  paw.classList.add('pop');
+}
+
+function renderJournal() {
+  $('journal').innerHTML = SPECIES_KEYS.map((k) => {
+    const found = animals.discovered.has(k);
+    const sp = SPECIES[k];
+    return `<li class="${found ? 'found' : ''}"><span>${found ? sp.emoji : '?'}</span>${found ? sp.name : '???'}</li>`;
+  }).join('');
+}
 
 function updateHud() {
   hud.alt.textContent = Math.round(plane.position.y);
@@ -238,16 +370,21 @@ function frame(now) {
     }
   }
 
-  const got = rings.update(dt, plane);
-  if (got && state.mode === 'flying') {
-    state.score += got;
-    hud.score.textContent = state.score;
-    hud.counter.classList.remove('pop');
-    void hud.counter.offsetWidth;
-    hud.counter.classList.add('pop');
-    plane.addBoost(22);
-    audio.chime();
+  const hits = rings.update(dt, plane);
+  if (state.mode === 'flying') {
+    for (const h of hits) onRing(h);
+    for (const a of animals.update(dt, plane)) onDiscover(a);
+    if (state.time - state.lastRing > 4.5) hud.combo.classList.remove('show');
+    // The paw print glows when an undiscovered animal is somewhere close.
+    hud.pawsBox.classList.toggle('near', animals.nearestNew < 220);
+    hud.gust.style.transform = `scaleX(${plane.gustFraction})`;
+  } else {
+    animals.update(dt, plane);
   }
+  state.rainbow = Math.max(0, state.rainbow - dt);
+  TRAIL_RAINBOW.value = Math.min(1, state.rainbow);
+  TRAIL_TIME.value = state.time;
+  bursts.update(dt);
 
   world.update(plane.position);
   foliage.updateLOD(camera.position);
@@ -271,9 +408,10 @@ function frame(now) {
 
   clouds.update(dt, camera.position);
   const speedK = THREE.MathUtils.clamp((plane.speed - 14) / 40, 0, 1);
-  trails[0].update(plane.leftTip, plane.up, 0.25 + speedK * 0.75);
-  trails[1].update(plane.rightTip, plane.up, 0.25 + speedK * 0.75);
-  streaks.update(dt, plane, 0.3 + speedK);
+  const trailK = Math.max(0.25 + speedK * 0.75, TRAIL_RAINBOW.value);
+  trails[0].update(plane.leftTip, plane.up, trailK);
+  trails[1].update(plane.rightTip, plane.up, trailK);
+  streaks.update(dt, plane, 0.3 + speedK + plane.gustFraction);
   motes.update(dt, plane.position);
   puffs.update(dt);
   birds.update(dt, state.time, plane, heightAt);
@@ -314,6 +452,7 @@ function start() {
   $('title').classList.add('fade');
   setTimeout(() => $('title').classList.add('hidden'), 1300);
   $('hud').classList.remove('hidden');
+  updatePaws();
 }
 
 let toastTimer = 0;
@@ -328,6 +467,7 @@ function showToast(text) {
 function togglePause() {
   if (state.mode === 'flying') {
     state.mode = 'paused';
+    renderJournal();
     $('paused').classList.remove('hidden');
     audio.ctx?.suspend();
   } else if (state.mode === 'paused') {
@@ -342,8 +482,9 @@ $('resume').addEventListener('click', togglePause);
 $('new-world').addEventListener('click', async () => {
   $('paused').classList.add('hidden');
   state.mode = 'loading';
-  applySeed(Math.floor(Math.random() * 1e6) + 1);
+  applyWorld(Math.floor(Math.random() * 1e6) + 1, themeKey);
   state.score = 0;
+  state.combo = 0;
   hud.score.textContent = 0;
   await buildAround();
   chaseCamera(0, true);
@@ -420,7 +561,7 @@ async function boot() {
 }
 
 requestAnimationFrame(frame);
-window.__paperplanes = { state, renderer, plane, world, camera, foliage, input, chaseCamera };
+window.__paperplanes = { state, renderer, plane, world, camera, foliage, input, chaseCamera, rings, animals, onRing, travel };
 boot().catch((err) => {
   console.error(err);
   document.querySelector('#loading .hint').textContent = 'Something went wrong loading the scene. Check the console.';
