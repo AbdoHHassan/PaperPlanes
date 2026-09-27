@@ -23,6 +23,11 @@
       </div>
       <div id="combo" class="combo">Combo <b>×<span id="combo-n">2</span></b></div>
       <div id="pointer" class="pointer"></div>
+      <div id="flow" class="flow" data-level="1">
+        <div class="flow-top"><b>FLOW</b> <span id="flow-level">×1</span> <em id="vario"></em></div>
+        <div class="flow-bar"><div id="flow-fill"></div></div>
+      </div>
+      <ul id="journeys-hud" class="journeys-hud"></ul>
       <div class="stats"><span id="alt">0</span> m &nbsp;·&nbsp; <span id="spd">0</span> km/h</div>
       <div class="keys"><kbd>M</kbd> sound &nbsp; <kbd>I</kbd> invert &nbsp; <kbd>H</kbd> hide &nbsp; <kbd>P</kbd> pause</div>
       <button id="pause-btn" class="hud-btn touch-only" aria-label="Pause">❚❚</button>
@@ -48,6 +53,8 @@
         <ul class="controls">
           <li><b>Steer</b> move the mouse · WASD / arrows · tilt your phone</li>
           <li><b>Gust</b> hold click · Space · touch and hold</li>
+          <li><b>Roll</b> Q / E · double-tap left or right</li>
+          <li><b>Flow</b> skim low, slip past trees, ride thermals and wind rivers</li>
           <li><b>Rings</b> gold gusts · <span style="color:#3ab8ff">⚡ swift</span> · <span style="color:#d05ad0">★ prism</span> · <span style="color:#ff5fa0">↻ flip</span> · <span style="color:#9a6bff">◎ portal</span></li>
           <li><b>Explore</b> find all 8 animals hiding in the landscape</li>
           <li><b>Write</b> word portals lead to Dreaming Hours, where you catch floating words to make a poem</li>
@@ -59,6 +66,9 @@
       <div class="card small">
         <h2>Paused</h2>
         <p class="sub"><b id="world-name">Summer Meadows</b> #<span id="seed"></span> · share the URL to share this world</p>
+        <h3>Journeys <small>✦ <span id="stamps">0</span> stamps</small></h3>
+        <ul id="journeys-menu" class="journeys-menu"></ul>
+        <div id="papers" class="papers"></div>
         <h3>Field journal</h3>
         <ul id="journal"></ul>
         <div class="sliders">

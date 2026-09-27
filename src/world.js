@@ -114,6 +114,7 @@ export class World {
         } else if (!ch.wantDetails && ch.detailsState !== 'none') this._despawn(ch, 'details');
         if (ring <= 3 && !ch.rings) ch.rings = this.rings.spawnForChunk(ch.cx, ch.cz);
         if (ring <= 2 && this.animals && !ch.animals) ch.animals = this.animals.spawnForChunk(ch.cx, ch.cz);
+        if (ring <= 3 && this.air && !ch.air) ch.air = this.air.spawnForChunk(ch.cx, ch.cz);
       }
     }
     for (const [k, ch] of this.chunks) if (!wanted.has(k)) this._unload(ch);
@@ -195,7 +196,13 @@ export class World {
           MODEL_NAMES[items[o]], items[o + 1], items[o + 2], items[o + 3], items[o + 4], items[o + 5],
           items[o + 6], items[o + 7], items[o + 8],
         );
-        if (h) list.push(h);
+        if (h) {
+          // Trees also become soft obstacles for the flight.
+          if (this.obstacles && kind === 'trees') {
+            h.obs = this.obstacles.addTree(MODEL_NAMES[items[o]], items[o + 1], items[o + 2], items[o + 3], items[o + 5], [items[o + 6], items[o + 7], items[o + 8]]);
+          }
+          list.push(h);
+        }
         job.i += STRIDE;
         // Check the clock every few instances; stop once this frame's slice is used.
         if (--budget % 16 === 0 && performance.now() > deadline) budget = 0;
@@ -216,12 +223,16 @@ export class World {
     this._despawn(ch, 'details');
     if (ch.rings) this.rings.removeChunk(ch.rings);
     if (ch.animals) this.animals.removeChunk(ch.animals);
+    if (ch.air) this.air.removeChunk(ch.air);
     this.chunks.delete(ch.key);
     ch.dead = true;
   }
 
   _despawn(ch, kind) {
-    for (const h of ch[kind]) this.foliage.remove(h);
+    for (const h of ch[kind]) {
+      this.foliage.remove(h);
+      if (h.obs) this.obstacles.remove(h.obs);
+    }
     ch[kind] = [];
     ch[`${kind}State`] = 'none';
   }

@@ -28,6 +28,31 @@ leaping koi on lakes, and eagles circling the peaks. Fly close to one to add it
 to your field journal (in the pause menu). The paw counter glows when an
 undiscovered animal is nearby, and the journal is remembered between visits.
 
+## Flow, air and journeys
+
+**Flow** is the heart of the game. It builds when you fly with style and ebbs
+when you coast, and it multiplies your score (×1 to ×5) and raises your
+cruising speed. There's no failing, only flowing more or less.
+
+| Builds flow | Costs flow |
+|---|---|
+| Skimming low over ground or water | Scraping the ground |
+| Slipping close past a tree ("Close!") | Crashing through a canopy (leaves slow you down) |
+| Threading rings, and completing a whole chain (slow-motion flourish) | Coasting for a while |
+| Riding thermals, ridge lift and wind rivers | |
+| Barrel rolls (Q / E, or double-tap left/right) | |
+
+**The air is alive.** Thermals are columns of rising seeds over open ground:
+circle inside them to climb without losing speed. Wind blowing up a hillside
+gives ridge lift. Wind rivers are long ribbons of fast air: fly along one and
+it sweeps you up to ~160 km/h and eases you down its course. A variometer
+beeps (and the HUD shows ↑ m/s) when you're in rising air.
+
+**Journeys** are three small goals at a time ("Ride wind rivers for 6 s",
+"Slip past 5 trees", "Reach Flow ×4"...). Each earns stamps, and stamps unlock
+new paper for your plane: graph paper, kraft, newsprint, washi blossoms,
+blueprint and gold leaf. Progress is kept between visits.
+
 ## Writing a poem in flight
 
 Half of all portals carry a word magnet. Fly through one and the word becomes
@@ -73,6 +98,7 @@ Phones only allow motion sensors on HTTPS pages. With `dev:phone`, open the
 |---|---|---|
 | Steer | Move the mouse (offset from screen centre), or WASD / arrows | Tilt the phone: rotate it like a steering wheel to bank, tip the top edge towards/away from you to climb/dive (drag to steer if motion access is denied) |
 | Gust | Hold left click, Space or Shift | Touch and hold (two fingers when drag-steering) |
+| Roll | `Q` / `E`, or double-click the left/right half | Double-tap the left/right half |
 | Other | `M` mute · `I` invert pitch · `H` hide HUD · `P`/`Esc` pause | **◎ Level** re-centres the tilt to how you hold the phone · **❚❚** pause |
 
 Every visit generates a new world. The pause menu shows the world number and has a **New world** button; `?seed=1234` in the URL reproduces a world, so you can share one.
@@ -95,6 +121,10 @@ Add `?low` or `?high` to the URL to force a quality tier (touch devices default 
 | `src/effects.js` | Wingtip trails, wind streaks, pollen motes, splash puffs, and a flock of birds. |
 | `src/rings.js` | Ring types and their layout. Chains are planned from the flight model: rings are spaced by the speed you'll actually have there (including the previous ring's gust), turns stay under half of full bank and shrink as speed rises, climbs and descents are capped at 9° and 12°, and heights clear the ground and treetops without needless dips. |
 | `scripts/ring-flight-test.cjs` | Simulated pilot that flies every chain with the real flight model and reports the hit rate; use it when tuning ring layout or handling. |
+| `src/flow.js` | The Flow meter: what builds it, what drains it, and the cruise bonus it gives. |
+| `src/air.js` | Thermals, ridge lift and wind rivers: generation, visuals and sampling the air at the plane. |
+| `src/obstacles.js` | Tree canopies as soft obstacles (spatial hash) for leaf brushes and near misses. |
+| `src/journeys.js` | Rotating goals, stamps and paper unlocks, saved locally. |
 | `src/fx.js` | Ring feedback: spark bursts, floating labels, screen flash, haptics. |
 | `src/animals.js` | Procedural low-poly animals: habitats, behaviours (grazing, fleeing, hopping, swimming, leaping, soaring) and discovery. |
 | `src/themes.js` | The six world themes (including the Dreaming Hours poem world): sky, light, fog, terrain and foliage palettes, and ambient particles. |

@@ -911,6 +911,102 @@ export class Audio {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Flow and air
+
+  /** A quick airy "fwip" as you slip past a tree. */
+  nearMiss(pan = 0) {
+    if (!this.ctx) return;
+    this._whoosh(this.now(), 900, 3200, 0.28, 0.14, clamp(pan, -1, 1));
+  }
+
+  /** Crashing through leaves. */
+  brush() {
+    if (!this.ctx) return;
+    const c = this.ctx;
+    const t = this.now();
+    for (let i = 0; i < 9; i++) {
+      const s = t + Math.random() * 0.35;
+      const bp = c.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1800 + Math.random() * 3500;
+      bp.Q.value = 2;
+      const g = this._out(this.sfxBus, (Math.random() - 0.5) * 0.8, 0.1);
+      this._env(g, s, 0.09, 0.003, 0.08);
+      const n = c.createBufferSource();
+      n.buffer = this.noise.white;
+      n.connect(bp).connect(g);
+      n.start(s, Math.random() * 3);
+      n.stop(s + 0.12);
+    }
+    const g = this._out(this.sfxBus, 0, 0.05);
+    const e = this._env(g, t, 0.08, 0.004, 0.18);
+    this._osc('sine', 180, t, e, g).frequency.exponentialRampToValueAtTime(90, t + 0.15);
+  }
+
+  /** Whole chain threaded: a rising flourish in key. */
+  chainComplete(length = 5) {
+    if (!this.ctx) return;
+    const t = this.now() + 0.1;
+    const steps = Math.min(8, length + 2);
+    for (let i = 0; i < steps; i++) {
+      const idx = this._chordToneNear(9 + i * 2);
+      this.bell(midiHz(this._note(idx)), t + i * 0.07, { dest: this.sfxBus, vel: 0.7, pan: (i / steps - 0.5) * 1.2, reverb: 0.7 });
+    }
+    this.chord.forEach((i, k) => this.harp(midiHz(this._note(i)), t + 0.5 + k * 0.02, { dest: this.sfxBus, vel: 0.7, pan: (k - 1) * 0.3 }));
+  }
+
+  levelUp(level) {
+    if (!this.ctx) return;
+    const t = this.now();
+    const idx = this._chordToneNear(10 + level * 2);
+    this.bell(midiHz(this._note(idx)), t, { dest: this.sfxBus, vel: 0.8, reverb: 0.6 });
+    this.bell(midiHz(this._note(idx + 2)), t + 0.09, { dest: this.sfxBus, vel: 0.6, reverb: 0.6 });
+  }
+
+  roll(dir = 1) {
+    if (!this.ctx) return;
+    this._whoosh(this.now(), 400, 2600, 0.6, 0.13, dir * 0.6);
+  }
+
+  /** A journey completed: a soft rubber-stamp thud and a bright bell. */
+  stamp() {
+    if (!this.ctx) return;
+    const t = this.now();
+    const g = this._out(this.sfxBus, 0, 0.1);
+    const e = this._env(g, t, 0.14, 0.002, 0.16);
+    this._osc('sine', 110, t, e, g).frequency.exponentialRampToValueAtTime(60, t + 0.12);
+    this.bell(midiHz(this._note(this._chordToneNear(16))), t + 0.12, { dest: this.sfxBus, vel: 0.8, reverb: 0.6 });
+  }
+
+  /**
+   * Variometer: like a glider's, soft beeps that quicken and rise with lift;
+   * plus the rush of a wind river. Call every frame.
+   */
+  air(lift, inRiver) {
+    if (!this.ctx) return;
+    const t = this.now();
+    if (!this.riverGain) {
+      const c = this.ctx;
+      const bp = c.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1100;
+      bp.Q.value = 0.8;
+      this.riverGain = c.createGain();
+      this.riverGain.gain.value = 0;
+      this._loop(this.noise.pink, 1.2).connect(bp).connect(this.riverGain).connect(this.ambBus);
+      this.nextVario = 0;
+    }
+    this.riverGain.gain.setTargetAtTime(inRiver ? 0.12 : 0, t, 0.3);
+    if (lift > 1.2 && t > this.nextVario) {
+      const f = 700 + lift * 90;
+      const g = this._out(this.sfxBus, 0, 0.05);
+      const e = this._env(g, t, 0.025, 0.004, 0.07);
+      this._osc('sine', f, t, e, g);
+      this.nextVario = t + Math.max(0.12, 0.6 - lift * 0.06);
+    }
+  }
+
   // Kept for older callers.
   chime() {
     this.ring('gold');

@@ -285,3 +285,53 @@ button.ghost {
 .sliders { display: flex; gap: 16px; justify-content: center; margin: 0 0 16px; font-size: 13px; font-weight: 700; }
 .sliders label { display: flex; align-items: center; gap: 8px; }
 .sliders input { width: 110px; accent-color: #c9772a; }
+
+/* ---------------------------------------------------------------- Flow */
+.flow {
+  position: absolute; left: 20px; bottom: 44px; width: 180px; color: #fff;
+  text-shadow: 0 1px 6px rgba(0, 40, 70, 0.4); font-size: 12px;
+}
+.flow-top { display: flex; gap: 6px; align-items: baseline; margin-bottom: 4px; }
+.flow-top b { letter-spacing: 0.12em; font-size: 11px; opacity: 0.85; }
+#flow-level { font: 800 18px 'Nunito', sans-serif; }
+#vario { font-style: normal; font-weight: 700; margin-left: auto; opacity: 0.9; }
+.flow-bar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.22); overflow: hidden; }
+#flow-fill {
+  height: 100%; width: 100%; transform-origin: left; transform: scaleX(0);
+  background: linear-gradient(90deg, #9fe3ff, #ffe9a8, #ff9bd0); transition: transform 0.15s linear;
+}
+.flow[data-level="3"] #flow-level, .flow[data-level="4"] #flow-level { color: #ffe9a8; }
+.flow[data-level="5"] #flow-level { color: #ffb3dc; text-shadow: 0 0 12px #ff9bd0; }
+
+.journeys-hud {
+  position: absolute; top: 64px; right: 16px; width: 230px; list-style: none; margin: 0; padding: 0;
+  font-size: 12px; color: #fff; text-shadow: 0 1px 6px rgba(0, 40, 70, 0.45);
+}
+.journeys-hud li, .journeys-menu li { margin-bottom: 7px; }
+.journeys-hud i, .journeys-menu i {
+  display: block; height: 3px; margin-top: 3px; border-radius: 2px;
+  background: linear-gradient(90deg, #ffe9a8 var(--p), rgba(255, 255, 255, 0.25) var(--p));
+}
+.journeys-menu { list-style: none; padding: 0; margin: 0 0 10px; text-align: left; font-size: 13px; }
+.journeys-menu i { background: linear-gradient(90deg, #c9772a var(--p), rgba(35, 49, 63, 0.12) var(--p)); }
+.card h3 small { font: 700 12px 'Nunito', sans-serif; opacity: 0.7; margin-left: 6px; }
+.papers { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 16px; }
+.papers button {
+  font: 700 12px 'Nunito', sans-serif; padding: 6px 11px; border-radius: 999px; cursor: pointer;
+  background: rgba(35, 49, 63, 0.06); color: var(--ink); border: 1px solid rgba(35, 49, 63, 0.15);
+}
+.papers button.on { background: var(--ink); color: var(--paper); }
+.papers button:disabled { opacity: 0.4; cursor: default; }
+@media (max-width: 600px), (pointer: coarse) {
+  .journeys-hud { display: none; }
+  .flow { bottom: 110px; width: 150px; }
+}
+
+/* Cards scroll rather than overflow on short (landscape phone) screens. */
+#title .card, #paused .card { max-height: calc(100vh - 32px); overflow-y: auto; }
+@media (max-height: 520px) {
+  #title .card { padding: 18px 22px 14px; }
+  #title h1 { font-size: 30px; }
+  #title .sub { margin-bottom: 12px; }
+  #title .controls { margin-top: 12px; line-height: 1.6; font-size: 12.5px; }
+}

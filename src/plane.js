@@ -4,31 +4,137 @@ import { heightAt, WATER_LEVEL } from './terrain.js';
 // ---------------------------------------------------------------------------
 // Geometry: a classic folded dart. Nose points to +Z.
 
-function paperTexture() {
+/** Paper styles for the plane, drawn on a canvas. Unlocked through Journeys. */
+function paperTexture(style = 'notebook') {
   const c = document.createElement('canvas');
   c.width = c.height = 512;
   const g = c.getContext('2d');
-  g.fillStyle = '#fbf8f0';
-  g.fillRect(0, 0, 512, 512);
-  // Faint paper grain.
-  for (let i = 0; i < 4000; i++) {
-    g.fillStyle = `rgba(120,100,70,${Math.random() * 0.04})`;
-    g.fillRect(Math.random() * 512, Math.random() * 512, 1 + Math.random() * 2, 1);
+  const grain = (alpha, color = '120,100,70') => {
+    for (let i = 0; i < 4000; i++) {
+      g.fillStyle = `rgba(${color},${Math.random() * alpha})`;
+      g.fillRect(Math.random() * 512, Math.random() * 512, 1 + Math.random() * 2, 1);
+    }
+  };
+  const lines = (color, step, width, vertical = false) => {
+    g.strokeStyle = color;
+    g.lineWidth = width;
+    for (let p = step / 2; p < 512; p += step) {
+      g.beginPath();
+      if (vertical) {
+        g.moveTo(p, 0);
+        g.lineTo(p, 512);
+      } else {
+        g.moveTo(0, p);
+        g.lineTo(512, p);
+      }
+      g.stroke();
+    }
+  };
+  switch (style) {
+    case 'graph':
+      g.fillStyle = '#f8faf6';
+      g.fillRect(0, 0, 512, 512);
+      grain(0.03);
+      lines('rgba(80,160,140,0.35)', 16, 1);
+      lines('rgba(80,160,140,0.35)', 16, 1, true);
+      lines('rgba(80,160,140,0.55)', 80, 2);
+      lines('rgba(80,160,140,0.55)', 80, 2, true);
+      break;
+    case 'kraft':
+      g.fillStyle = '#c49a6c';
+      g.fillRect(0, 0, 512, 512);
+      grain(0.18, '90,60,30');
+      for (let i = 0; i < 300; i++) {
+        g.strokeStyle = `rgba(${Math.random() < 0.5 ? '240,210,170' : '110,75,40'},0.25)`;
+        g.beginPath();
+        const x = Math.random() * 512, y = Math.random() * 512;
+        g.moveTo(x, y);
+        g.lineTo(x + (Math.random() - 0.5) * 30, y + (Math.random() - 0.5) * 6);
+        g.stroke();
+      }
+      break;
+    case 'newsprint': {
+      g.fillStyle = '#ece8dc';
+      g.fillRect(0, 0, 512, 512);
+      grain(0.05);
+      g.fillStyle = 'rgba(40,40,40,0.8)';
+      g.fillRect(24, 20, 464, 34); // headline
+      for (let col = 0; col < 4; col++) {
+        for (let y = 72; y < 500; y += 11) {
+          if (Math.random() < 0.06) continue;
+          const w = 100 - (Math.random() < 0.15 ? Math.random() * 50 : 0);
+          g.fillStyle = 'rgba(60,60,60,0.45)';
+          g.fillRect(24 + col * 118, y, w, 5);
+        }
+      }
+      g.fillStyle = 'rgba(60,60,60,0.25)';
+      g.fillRect(260, 90, 110, 90); // a photo
+      break;
+    }
+    case 'washi': {
+      g.fillStyle = '#fbf3ea';
+      g.fillRect(0, 0, 512, 512);
+      grain(0.05);
+      for (let i = 0; i < 38; i++) {
+        const x = Math.random() * 512, y = Math.random() * 512, r = 10 + Math.random() * 16;
+        const col = ['#e8788f', '#f2a0b4', '#d9485f', '#f6c5cf'][i % 4];
+        for (let p = 0; p < 5; p++) {
+          const a = (p / 5) * Math.PI * 2 + i;
+          g.fillStyle = col;
+          g.beginPath();
+          g.ellipse(x + Math.cos(a) * r * 0.55, y + Math.sin(a) * r * 0.55, r * 0.45, r * 0.3, a, 0, Math.PI * 2);
+          g.fill();
+        }
+        g.fillStyle = '#f4d35e';
+        g.beginPath();
+        g.arc(x, y, r * 0.2, 0, Math.PI * 2);
+        g.fill();
+      }
+      break;
+    }
+    case 'blueprint':
+      g.fillStyle = '#1f4f8a';
+      g.fillRect(0, 0, 512, 512);
+      grain(0.08, '255,255,255');
+      lines('rgba(255,255,255,0.18)', 16, 1);
+      lines('rgba(255,255,255,0.18)', 16, 1, true);
+      lines('rgba(255,255,255,0.45)', 128, 2);
+      lines('rgba(255,255,255,0.45)', 128, 2, true);
+      g.strokeStyle = 'rgba(255,255,255,0.7)';
+      g.lineWidth = 2;
+      g.strokeRect(300, 300, 150, 90);
+      g.beginPath();
+      g.arc(150, 360, 60, 0, Math.PI * 2);
+      g.stroke();
+      break;
+    case 'gold': {
+      const grd = g.createLinearGradient(0, 0, 512, 512);
+      grd.addColorStop(0, '#f7e08a');
+      grd.addColorStop(0.35, '#d9a93e');
+      grd.addColorStop(0.6, '#fff0b5');
+      grd.addColorStop(1, '#c08d2c');
+      g.fillStyle = grd;
+      g.fillRect(0, 0, 512, 512);
+      for (let i = 0; i < 90; i++) {
+        g.fillStyle = `rgba(255,255,255,${Math.random() * 0.35})`;
+        g.beginPath();
+        g.moveTo(Math.random() * 512, Math.random() * 512);
+        for (let k = 0; k < 4; k++) g.lineTo(Math.random() * 512, Math.random() * 512);
+        g.fill();
+      }
+      break;
+    }
+    default:
+      g.fillStyle = '#fbf8f0';
+      g.fillRect(0, 0, 512, 512);
+      grain(0.04);
+      lines('rgba(90,140,210,0.55)', 30, 2);
+      g.strokeStyle = 'rgba(220,90,90,0.6)';
+      g.beginPath();
+      g.moveTo(96, 0);
+      g.lineTo(96, 512);
+      g.stroke();
   }
-  // Ruled notebook lines + margin.
-  g.strokeStyle = 'rgba(90,140,210,0.55)';
-  g.lineWidth = 2;
-  for (let y = 24; y < 512; y += 30) {
-    g.beginPath();
-    g.moveTo(0, y);
-    g.lineTo(512, y);
-    g.stroke();
-  }
-  g.strokeStyle = 'rgba(220,90,90,0.6)';
-  g.beginPath();
-  g.moveTo(96, 0);
-  g.lineTo(96, 512);
-  g.stroke();
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
@@ -102,9 +208,10 @@ export function stepSpeed(s, dt, pitch, extraAccel = 0) {
     gustAccel = s.gustStrength * Math.min(1, (s.gust / s.gustTotal) * 2.5);
   }
   // Climbing trades speed for height; diving gains it back; drag pulls to cruise.
-  const accel = -9.81 * Math.sin(pitch) * 1.1 + (CRUISE - s.speed) * 0.3;
+  const cruise = CRUISE + (s.cruiseBonus ?? 0); // flow raises your cruising speed
+  const accel = -9.81 * Math.sin(pitch) * 1.1 + (cruise - s.speed) * 0.3;
   s.speed += (accel + extraAccel + gustAccel) * dt;
-  s.speed = Math.min(Math.max(s.speed, MIN_SPEED), MAX_SPEED + (s.gust > 0 ? 6 : 0));
+  s.speed = Math.min(Math.max(s.speed, MIN_SPEED), MAX_SPEED + (s.gust > 0 ? 6 : 0) + (s.cruiseBonus ?? 0));
 }
 
 export class PaperPlane {
@@ -123,6 +230,7 @@ export class PaperPlane {
     );
     this.mesh.castShadow = true;
     this.mesh.scale.setScalar(1.45);
+    this.paper = 'notebook';
     scene.add(this.mesh);
 
     this.position = new THREE.Vector3(0, 60, -200);
@@ -136,7 +244,11 @@ export class PaperPlane {
     this.gust = 0; // ring gust: seconds remaining
     this.gustStrength = 0;
     this.gustTotal = 1;
-    this.trick = null; // { type: 'loop' | 'roll', t, dur }
+    this.trick = null; // { type: 'loop' | 'roll', dir, t, dur }
+    this.lift = 0;
+    this.vario = 0;
+    this.cruiseBonus = 0;
+    this.inRiver = false;
     this.camPitch = 0; // pitch the chase camera follows (ignores tricks)
     this.camForward = new THREE.Vector3(0, 0, 1);
     this.groundDist = 100;
@@ -148,6 +260,18 @@ export class PaperPlane {
     this.rightTip = new THREE.Vector3();
     this.up = new THREE.Vector3();
     this._e = new THREE.Euler(0, 0, 0, 'YXZ');
+  }
+
+  setPaper(style) {
+    if (style === this.paper) return;
+    this.paper = style;
+    const m = this.mesh.material;
+    m.map.dispose();
+    m.map = paperTexture(style);
+    m.metalness = style === 'gold' ? 0.55 : 0;
+    m.roughness = style === 'gold' ? 0.35 : 0.85;
+    m.emissiveIntensity = style === 'blueprint' ? 0.12 : 0.28;
+    m.needsUpdate = true;
   }
 
   reset(pos, yaw) {
@@ -171,14 +295,26 @@ export class PaperPlane {
     return this.gust > 0 ? this.gust / this.gustTotal : 0;
   }
 
-  startTrick(type) {
-    if (this.trick) return;
-    this.trick = { type, t: 0, dur: type === 'loop' ? 2.1 : 0.9, basePitch: this.pitch };
+  /** 'loop' or 'roll'; rolls take a direction (1 right, -1 left) and dodge sideways. */
+  startTrick(type, dir = 1) {
+    if (this.trick) return false;
+    this.trick = { type, dir, t: 0, dur: type === 'loop' ? 2.1 : 0.75, basePitch: this.pitch };
+    return true;
   }
 
-  /** input: { x: -1..1 (right +), y: -1..1 (up +), boost: bool } */
-  update(dt, input) {
+  /** Flying through a tree canopy: leaves drag you back. */
+  brush() {
+    this.speed = Math.max(MIN_SPEED, this.speed * 0.82);
+    this.wobble = 1;
+  }
+
+  /**
+   * input: { x: -1..1 (right +), y: -1..1 (up +), boost: bool }
+   * air (optional): { lift, river, riverDir, riverAlign } from Air.update
+   */
+  update(dt, input, air = null) {
     this.time += dt;
+    const y0 = this.position.y;
     const k = (rate) => 1 - Math.exp(-rate * dt);
 
     // Banking drives turning, like a real glider.
@@ -193,7 +329,20 @@ export class PaperPlane {
 
     if (input.boost) this.addBoost(dt * 20);
     this.boost *= Math.exp(-dt * 0.9);
-    stepSpeed(this, dt, this.pitch, this.boost * 0.5);
+    // Wind rivers: fly with the current and it sweeps you along, easing
+    // your heading down its course.
+    let riverAccel = 0;
+    this.inRiver = false;
+    if (air?.river && air.riverAlign > 0.2) {
+      this.inRiver = true;
+      const a = air.riverAlign;
+      riverAccel = Math.max(0, 44 - this.speed) * 1.3 * a;
+      let e = Math.atan2(air.riverDir.x, air.riverDir.z) - this.yaw;
+      e = Math.atan2(Math.sin(e), Math.cos(e));
+      this.yaw += THREE.MathUtils.clamp(e, -0.5, 0.5) * 1.4 * a * dt;
+      this.pitch += (Math.asin(THREE.MathUtils.clamp(air.riverDir.y, -0.5, 0.5)) - this.pitch) * 0.8 * a * dt;
+    }
+    stepSpeed(this, dt, this.pitch, this.boost * 0.5 + riverAccel);
 
     // Tricks: a loop-the-loop really flies the loop; a barrel roll is a spin.
     let flightPitch = this.pitch;
@@ -206,7 +355,11 @@ export class PaperPlane {
         flightPitch = this.pitch + e * Math.PI * 2;
         this.speed = Math.max(this.speed, CRUISE);
       } else {
-        trickRoll = e * Math.PI * 2;
+        trickRoll = e * Math.PI * 2 * tr.dir;
+        // Dodge sideways through the roll.
+        const side = Math.sin(Math.PI * Math.min(1, tr.t)) * 19 * tr.dir * dt;
+        this.position.x -= Math.cos(this.yaw) * side;
+        this.position.z += Math.sin(this.yaw) * side;
       }
       if (tr.t >= 1) this.trick = null;
     }
@@ -218,6 +371,9 @@ export class PaperPlane {
     this.forward.set(Math.sin(this.yaw) * cp, Math.sin(flightPitch), Math.cos(this.yaw) * cp);
     this.velocity.copy(this.forward).multiplyScalar(this.speed);
     this.position.addScaledVector(this.velocity, dt);
+    // Rising air (thermals, ridge lift) carries you up without costing speed.
+    this.lift += ((air?.lift ?? 0) - this.lift) * k(3);
+    this.position.y += this.lift * dt;
 
     // Ground and water: bounce off gently rather than crash.
     const ground = Math.max(heightAt(this.position.x, this.position.z), WATER_LEVEL);
@@ -232,10 +388,13 @@ export class PaperPlane {
       this.speed *= 1 - 0.6 * dt;
     }
 
-    // Visual orientation with a little paper flutter.
-    const flutter = 0.02 + Math.min(0.04, (this.speed - CRUISE) * 0.001);
+    this.vario = (this.position.y - y0) / Math.max(dt, 1e-4);
+
+    // Visual orientation with a little paper flutter (and a shake after brushing leaves).
+    this.wobble = (this.wobble ?? 0) * Math.exp(-dt * 4);
+    const flutter = 0.02 + Math.min(0.04, (this.speed - CRUISE) * 0.001) + this.wobble * 0.15;
     this._e.set(
-      -flightPitch + Math.sin(this.time * 13.1) * flutter * 0.4,
+      -flightPitch + Math.sin(this.time * 13.1) * flutter * 0.4 + (this.inRiver ? Math.sin(this.time * 6) * 0.03 : 0),
       this.yaw + Math.sin(this.time * 3.7) * flutter * 0.3,
       this.roll + trickRoll + Math.sin(this.time * 17.3) * flutter,
     );
