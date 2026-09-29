@@ -52,6 +52,17 @@ export class World {
     for (const w of this.workers) w.postMessage({ type: 'seed', seed, theme });
   }
 
+  /** Re-lays ring chains (after a speed or spacing change). */
+  respawnRings() {
+    for (const ch of this.chunks.values()) {
+      if (ch.rings) this.rings.removeChunk(ch.rings);
+      ch.rings = null;
+    }
+    this.rings.chainTotals.clear();
+    this.rings.chainHits.clear();
+    this._center = { x: NaN, z: NaN };
+  }
+
   get busy() {
     return this.jobs.length + this.applyQueue.length + this.workers.reduce((a, w) => a + w.inflight, 0);
   }

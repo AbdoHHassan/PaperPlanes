@@ -19,6 +19,7 @@ import { Journeys, PAPERS } from './journeys.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
 import { QUALITY } from './config.js';
+import { settings, OPTIONS, value, setSetting, onSettingsChange } from './settings.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('scene');
@@ -186,38 +187,95 @@ function panOf(pos) {
   return THREE.MathUtils.clamp(tmpPan.x / (Math.abs(tmpPan.z) + Math.abs(tmpPan.x) + 1e-3), -1, 1);
 }
 
+// The camera rig: an anchor that rides along with the plane's own velocity
+// (so there's no lag that grows with speed) and only smooths the jolts, a
+// view direction that turns through a critically damped spring, a smoothed
+// floor so it glides over hills, and smooth-noise shake instead of jitter.
+const rig = {
+  anchor: new THREE.Vector3(),
+  yaw: 0,
+  yawVel: 0,
+  pitch: 0,
+  pitchVel: 0,
+  floor: 0,
+  shakeT: 0,
+};
+const camDir = new THREE.Vector3();
+
 function chaseCamera(dt, snap = false) {
+  const motion = value('motion');
+  const dist = value('camera');
+  if (snap) {
+    rig.anchor.copy(plane.position);
+    rig.yaw = plane.yaw;
+    rig.pitch = plane.camPitch;
+    rig.yawVel = rig.pitchVel = 0;
+    rig.floor = Math.max(heightAt(plane.position.x, plane.position.z), WATER_LEVEL);
+  } else {
+    // Feed-forward the smooth flight velocity, then ease out whatever's left
+    // (dodges, ground pushes) over ~0.15 s.
+    rig.anchor.addScaledVector(plane.flightVel, dt);
+    rig.anchor.lerp(plane.position, 1 - Math.exp(-dt * 7));
+    // Spring the view angles towards the plane's heading and pitch.
+    let e = plane.yaw - rig.yaw;
+    e = Math.atan2(Math.sin(e), Math.cos(e));
+    const wy = 5.2;
+    rig.yawVel += (wy * wy * e - 2 * wy * rig.yawVel) * dt;
+    rig.yaw += rig.yawVel * dt;
+    const wpc = 4.2;
+    rig.pitchVel += (wpc * wpc * (plane.camPitch - rig.pitch) - 2 * wpc * rig.pitchVel) * dt;
+    rig.pitch += rig.pitchVel * dt;
+  }
+
   // Offset behind the plane, pitched a little with it.
-  tmpE.set(-plane.camPitch * 0.45, plane.yaw, 0);
+  tmpE.set(-rig.pitch * 0.45, rig.yaw, 0);
   tmpQ.setFromEuler(tmpE);
   // Tall (portrait) screens see less sideways, so sit further back.
   const portrait = Math.max(1, 1 / camera.aspect) ** 0.6;
-  const back = (7.5 + Math.max(0, plane.speed - plane.cruise) * 0.06) * portrait;
-  tmpV.set(0, 2.7 * portrait, -back).applyQuaternion(tmpQ).add(plane.position);
-  const k = snap ? 1 : 1 - Math.exp(-dt * 5.5);
-  camPos.lerp(tmpV, k);
-  const ground = Math.max(heightAt(camPos.x, camPos.z), WATER_LEVEL + 0.5);
-  camPos.y = Math.max(camPos.y, ground + 1.2);
+  const back = (7.5 + Math.max(0, plane.speed - plane.cruise) * 0.05) * portrait * dist;
+  tmpV.set(0, 2.7 * portrait * dist, -back).applyQuaternion(tmpQ).add(rig.anchor);
+  camPos.copy(tmpV);
+  // Glide over the ground: a smoothed floor rather than a hard clamp.
+  const g = Math.max(heightAt(camPos.x, camPos.z), WATER_LEVEL + 0.5);
+  rig.floor += (g - rig.floor) * (snap ? 1 : 1 - Math.exp(-dt * (g > rig.floor ? 9 : 3)));
+  const minY = rig.floor + 1.4;
+  if (camPos.y < minY + 1.5) camPos.y = minY + 1.5 * smoothMax01((camPos.y - minY) / 1.5);
 
-  tmpV.copy(plane.position).addScaledVector(plane.camForward, 9).setY(plane.position.y + plane.camForward.y * 9 + 0.6);
-  camLook.lerp(tmpV, snap ? 1 : 1 - Math.exp(-dt * 8));
+  camDir.set(Math.sin(rig.yaw) * Math.cos(rig.pitch), Math.sin(rig.pitch), Math.cos(rig.yaw) * Math.cos(rig.pitch));
+  camLook.copy(rig.anchor).addScaledVector(camDir, 9);
+  camLook.y += 0.6 * dist;
 
   // Lean the horizon a little into turns.
-  tmpAxis.copy(plane.camForward).setY(0).normalize();
-  tmpLean.set(0, 1, 0).applyAxisAngle(tmpAxis, plane.roll * 0.25);
+  tmpAxis.copy(camDir).setY(0).normalize();
+  tmpLean.set(0, 1, 0).applyAxisAngle(tmpAxis, plane.roll * 0.25 * motion);
   camUp.lerp(tmpLean, snap ? 1 : 1 - Math.exp(-dt * 3)).normalize();
 
   camera.position.copy(camPos);
-  if (state.shake > 0) {
-    camera.position.x += (Math.random() - 0.5) * state.shake;
-    camera.position.y += (Math.random() - 0.5) * state.shake;
-    state.shake *= Math.exp(-dt * 8);
+  // Shake ramps in (no sudden offset) and decays smoothly.
+  rig.shakeAmp = (rig.shakeAmp ?? 0) + (state.shake - (rig.shakeAmp ?? 0)) * (1 - Math.exp(-dt * 18));
+  if (rig.shakeAmp > 0.002) {
+    // Smooth, decaying shake built from a few incommensurate sines.
+    rig.shakeT += dt;
+    const a = rig.shakeAmp * motion;
+    const t = rig.shakeT;
+    // A low, soft rumble (2-4 Hz) rather than a buzz.
+    camera.position.x += (Math.sin(t * 15) * 0.6 + Math.sin(t * 23 + 1.3) * 0.4) * a * 0.6;
+    camera.position.y += (Math.sin(t * 19 + 0.7) * 0.6 + Math.sin(t * 27 + 2.1) * 0.4) * a * 0.6;
+    state.shake *= Math.exp(-dt * 6);
   }
   camera.up.copy(camUp);
   camera.lookAt(camLook);
-  const fov = 60 + (portrait - 1) * 12 + plane.gustFraction * 8 + THREE.MathUtils.clamp((plane.speed - plane.cruise) * 0.45, -4, 18);
-  camera.fov += (fov - camera.fov) * (1 - Math.exp(-dt * 3));
+  const kick = motion;
+  const fov = 60 + (portrait - 1) * 12 + plane.gustFraction * 7 * kick + THREE.MathUtils.clamp((plane.speed - plane.cruise) * 0.4 * kick, -4, 16);
+  camera.fov += (fov - camera.fov) * (snap ? 1 : 1 - Math.exp(-dt * 2.5));
   camera.updateProjectionMatrix();
+}
+
+/** Smooth version of max(x, 0) near zero, for soft floors (x in units of the blend width). */
+function smoothMax01(x) {
+  if (x >= 1) return x;
+  const t = Math.max(-1, x);
+  return 0.25 * (t + 1) * (t + 1);
 }
 
 // Slow cinematic orbit used behind the title screen.
@@ -538,7 +596,7 @@ function tendFlow(dt, a) {
 function chainComplete(position, length) {
   bumpFlow('chain');
   journeys.track('chain');
-  state.timeScale = 0.3; // a breath of slow motion
+  state.slowmo = 0.7; // a breath of slow motion (eased in and out)
   audio.chainComplete(length);
   feedback.popup(tmpV.copy(position).setY(position.y + 5), `Chain complete!`, '#fff4c2', true);
   bursts.emit(position, plane.camForward, ['#fff4c2', '#ffd27a', '#ffffff'], 160, 8, 18);
@@ -692,8 +750,10 @@ function frame(now) {
   // two, which otherwise shows up as micro-stutter in the chase camera.
   const raw = Math.min(timer.getDelta(), 1 / 20);
   smoothDt += (raw - smoothDt) * (Math.abs(raw - smoothDt) > 0.01 ? 1 : 0.2);
-  // Slow-motion moments ease back to real time.
-  state.timeScale += (1 - state.timeScale) * Math.min(1, smoothDt * 1.6);
+  // Slow-motion moments ease in quickly and back out gently.
+  state.slowmo = Math.max(0, (state.slowmo ?? 0) - smoothDt);
+  const slowTarget = state.slowmo > 0 ? 0.35 : 1;
+  state.timeScale += (slowTarget - state.timeScale) * Math.min(1, smoothDt * (slowTarget < state.timeScale ? 9 : 1.8));
   const dt = smoothDt * state.timeScale;
   if (state.mode === 'paused' || state.mode === 'loading') {
     renderer.render(scene, camera);
@@ -862,6 +922,29 @@ function togglePause() {
 
 $('start').addEventListener('click', start);
 input.onDoubleTap = (side) => doRoll(side);
+// Flight experience settings (pause menu).
+function renderSettings() {
+  $('flight-settings').innerHTML = Object.entries(OPTIONS)
+    .map(
+      ([key, o]) =>
+        `<div class="setting"><span>${o.label}</span><div class="seg">${Object.keys(o.choices)
+          .map((c) => `<button data-set="${key}" data-choice="${c}" class="${settings[key] === c ? 'on' : ''}">${c}</button>`)
+          .join('')}</div></div>`,
+    )
+    .join('');
+}
+renderSettings();
+$('flight-settings').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-set]');
+  if (!b) return;
+  setSetting(b.dataset.set, b.dataset.choice);
+  renderSettings();
+});
+onSettingsChange((key) => {
+  // Ring spacing is planned from speed and spacing, so re-lay the chains.
+  if (key === 'speed' || key === 'spacing') world.respawnRings();
+});
+
 // Soft click on every button.
 document.addEventListener('click', (e) => {
   if (e.target.closest('button')) audio.click();
