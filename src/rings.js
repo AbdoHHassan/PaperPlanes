@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { heightAt, forestAt, getSeed, WATER_LEVEL } from './terrain.js';
 import { CRUISE, MAX_TURN_RATE, applyGust, stepSpeed } from './plane.js';
 import { WORDS } from './words.js';
+import { value } from './settings.js';
 import { makeTile } from './wordtiles.js';
 
 // Words that open the way into the poem world.
@@ -36,7 +37,8 @@ const SHIFT_CYCLE = ['gold', 'swift', 'prism', 'flip'];
 // from the previous ring and any climb), turns and slopes stay well inside
 // what the flight model can do, and heights clear the ground and treetops.
 
-const RING_INTERVAL = 2.0; // seconds between rings at the predicted speed
+// Seconds between rings at the predicted speed (scaled by the spacing setting).
+const ringInterval = () => 2.0 * value('spacing');
 const TURN_RATE = MAX_TURN_RATE * 0.42; // comfortable turn rate: under half of full bank
 const MAX_CLIMB = Math.tan((9 * Math.PI) / 180); // climbing costs speed, so keep it gentle
 const MAX_DESCENT = Math.tan((12 * Math.PI) / 180);
@@ -106,11 +108,11 @@ export function planChain(r, x0, z0, yaw0, types, startAlt = null) {
       // allowed turn shrinks with speed (roughly constant sideways demand).
       const speedFactor = Math.min(1, CRUISE / sim.speed);
       const omega = afterFlip ? 0 : turnAmp * speedFactor * Math.sin(phase + i * turnFreq);
-      const dist = travel(sim, RING_INTERVAL, slopes[i]);
-      const mid = yaw + omega * RING_INTERVAL * 0.5;
+      const dist = travel(sim, ringInterval(), slopes[i]);
+      const mid = yaw + omega * ringInterval() * 0.5;
       x += Math.sin(mid) * dist;
       z += Math.cos(mid) * dist;
-      yaw += omega * RING_INTERVAL;
+      yaw += omega * ringInterval();
     }
 
     // Heights: clear obstacles, then limit slopes in both directions so the
@@ -253,7 +255,10 @@ export class Rings {
     const guide = cx === 0 && cz === 0; // a first chain right in front of the start
     const nearSpawn = Math.hypot(cx, cz) < 1.5;
     if (nearSpawn && !guide) return list;
-    const chains = (r() < this.chainChance ? 1 : 0) + (guide ? 1 : 0);
+    // Even spacing: at most one chain per 2x2-chunk area, centred in it, so
+    // chains rarely cross and there's a breath between one and the next.
+    const anchor = ((cx % 2) + 2) % 2 === 0 && ((cz % 2) + 2) % 2 === 0;
+    const chains = (anchor && r() < Math.min(0.95, (this.chainChance * 2.3) / value('spacing') ** 1.5) ? 1 : 0) + (guide ? 1 : 0);
     for (let c = 0; c < chains; c++) {
       let x = cx * CHUNK + r() * CHUNK;
       let z = cz * CHUNK + r() * CHUNK;
@@ -269,8 +274,14 @@ export class Rings {
         startAlt = 40;
         types = ['gold', 'gold', 'swift', 'gold', 'flip', 'gold', 'prism'];
       } else {
-        const n = 4 + Math.floor(r() * 4);
+        const n = 4 + Math.floor(r() * 3);
         types = Array.from({ length: n }, () => this._pickType(r));
+        // Centre the chain in its area.
+        const span = (n - 1) * CRUISE * 1.2 * ringInterval();
+        const mx = (cx + 1) * CHUNK + (r() - 0.5) * 100;
+        const mz = (cz + 1) * CHUNK + (r() - 0.5) * 100;
+        x = mx - Math.sin(yaw) * span * 0.5;
+        z = mz - Math.cos(yaw) * span * 0.5;
       }
       const path = planChain(r, x, z, yaw, types, startAlt);
       const chainId = `${cx},${cz},${c}`;

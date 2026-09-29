@@ -96,7 +96,7 @@ export class Air {
       const g = heightAt(x, z);
       if (g > WATER_LEVEL + 3 && forestAt(x, z) < 0.45) out.push(this._thermal(x, g, z, r));
     }
-    if (r() < 0.1) out.push(this._river(cx * CHUNK + r() * CHUNK, cz * CHUNK + r() * CHUNK, r() * Math.PI * 2, r));
+    if (r() < 0.07) out.push(this._river(cx * CHUNK + r() * CHUNK, cz * CHUNK + r() * CHUNK, r() * Math.PI * 2, r));
     return out;
   }
 
@@ -268,6 +268,7 @@ export class Air {
         res.riverAlign = dir.x * plane.forward.x + dir.y * plane.forward.y + dir.z * plane.forward.z;
         res.riverDir.copy(dir);
         res.riverCenter = S[bi];
+        res.riverDist = Math.sqrt(best) / (RIVER_WIDTH * 1.18); // 0 centre .. 1 edge
         break;
       }
     }

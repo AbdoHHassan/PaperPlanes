@@ -209,9 +209,12 @@ function curve(angle, range) {
   return Math.sign(angle) * (0.55 * t + 0.45 * t * t);
 }
 
+// Small dead zone, then a gentle expo curve: fine control near the centre,
+// full authority at the edges.
 function clampDead(v) {
-  const dead = 0.06;
+  const dead = 0.05;
   const a = Math.abs(v);
   if (a < dead) return 0;
-  return Math.sign(v) * Math.min(1, (a - dead) / (1 - dead));
+  const t = Math.min(1, (a - dead) / (1 - dead));
+  return Math.sign(v) * (0.45 * t + 0.55 * t * t);
 }

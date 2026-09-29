@@ -28,6 +28,29 @@ leaping koi on lakes, and eagles circling the peaks. Fly close to one to add it
 to your field journal (in the pause menu). The paw counter glows when an
 undiscovered animal is nearby, and the journal is remembered between visits.
 
+## How it flies
+
+The flight model runs on fixed 120 Hz substeps, so it behaves the same at 30
+or 144 fps. Bank and pitch follow the stick through critically damped springs
+(no snaps, no overshoot), and stall and ceiling limits blend in rather than
+clamp. A ground-effect cushion looks ahead at the terrain and your sink rate
+and eases the nose up before contact, with a spring-damped soft floor as the
+last resort, so skimming glides instead of bouncing. Gusts ramp in and out,
+and leaf brushes drag you back over ~0.4 s instead of all at once.
+
+The chase camera rides along with the plane's own velocity, so it doesn't
+drift further behind as you speed up. It turns through springs and glides
+over hills on a smoothed floor, and its shake is a low, soft rumble.
+
+Ring chains are laid out one per 2×2-chunk area, centred in it, so chains
+rarely cross and there's a breather between them.
+
+**Flight settings** (pause menu): Speed (calm / normal / brisk), Steering
+(gentle / normal / sharp), Assist (how strong the ground cushion is), Ring
+spacing (relaxed / normal / busy: both the gap between rings and how often
+chains appear), Camera distance, and Camera motion (calm tones down lean,
+shake and speed FOV). Ring chains are re-laid for the new speed and spacing.
+
 ## Flow, air and journeys
 
 **Flow** is the heart of the game. It builds when you fly with style and ebbs
@@ -116,6 +139,7 @@ Add `?low` or `?high` to the URL to force a quality tier (touch devices default 
 | `src/world.js` | Streams 160 m chunks around the plane: queues jobs by distance, uploads finished tiles, and adds instances in time-sliced batches (≤1.5 ms per frame) so new land never causes a hitch. |
 | `src/foliage.js` | Draws every plant and rock through one `BatchedMesh` per material, with per-instance tints (summer greens and autumn oranges), per-instance LOD switching by distance, and wind sway in the vertex shader, including shadows. |
 | `src/input.js` | Mouse, keyboard, touch and gyroscope steering. Tilt is read as the gravity vector in screen space, so it works in portrait and landscape without angle flips. |
+| `src/settings.js` | Flight experience settings (speed, steering, assist, ring spacing, camera), saved locally. |
 | `src/plane.js` | The paper plane mesh (with a canvas notebook-paper texture) and an arcade glider model: bank to turn, trade height for speed, stall recovery, soft bounces off ground and water. |
 | `src/sky.js` | Gradient sky with sun and cirrus, drifting low-poly clouds, and animated low-poly water. |
 | `src/effects.js` | Wingtip trails, wind streaks, pollen motes, splash puffs, and a flock of birds. |
