@@ -11,7 +11,9 @@ import { Bursts, Feedback } from './fx.js';
 import { THEMES, PORTAL_THEMES } from './themes.js';
 import { WordTiles } from './wordtiles.js';
 import { Poem } from './poem.js';
-import { offerWords, lineText, MOODS, POS_COLORS } from './words.js';
+import { POS_COLORS } from './words.js';
+import { FORMS } from './grammar.js';
+import { Onboarding } from './onboarding.js';
 import { Obstacles } from './obstacles.js';
 import { Air } from './air.js';
 import { Flow } from './flow.js';
@@ -81,6 +83,18 @@ const obstacles = new Obstacles();
 const air = new Air(scene);
 const flow = new Flow();
 const journeys = new Journeys();
+const onboarding = new Onboarding({
+  plane, input, rings, world, poem, wordTiles, audio, feedback,
+  onFinish: (skipped) => {
+    document.body.classList.remove('coaching');
+    updatePoemUi();
+    showToast(skipped ? 'Flight School skipped · replay it any time from the pause menu' : "You're ready. Have a lovely flight ✦");
+  },
+});
+function startFlightSchool() {
+  document.body.classList.add('coaching');
+  onboarding.start();
+}
 world.obstacles = obstacles;
 world.air = air;
 plane.setPaper(journeys.paper);
@@ -151,7 +165,6 @@ const state = {
   lastRing: -99,
   rainbow: 0,
   trick: 0,
-  mood: MOODS[Math.floor(Math.random() * MOODS.length)],
   nextCluster: 0,
   lineFreqs: [],
   echoes: {}, // word resonances in progress: name -> seconds left
@@ -325,6 +338,7 @@ const HAPTICS = { gold: 15, swift: [20, 40, 30], prism: [15, 30, 15, 30, 15], fl
 
 function onRing(hit) {
   const { ring, type, position } = hit;
+  onboarding.onRing(hit);
   const def = RING_TYPES[type];
   // Chain rings within a few seconds of each other to build a combo.
   state.combo = state.time - state.lastRing < 4.5 ? state.combo + 1 : 1;
@@ -363,8 +377,9 @@ function onRing(hit) {
   if (def.portal) {
     journeys.track('portal');
     if (ring.word) {
-      // A word portal: the word becomes part of your poem, and in you go.
-      catchWord(ring.word, position);
+      // A word portal: the word comes with you, and will find its way into your poem.
+      poem.seed(ring.word);
+      feedback.popup(position, ring.word.w, '#e9dcff', true);
       travel('ethereal');
     } else travel();
   }
@@ -381,59 +396,84 @@ function updatePoemUi(poemWorld = themeKey === 'ethereal') {
 }
 
 function tendWords(dt) {
-  if (themeKey !== 'ethereal' || state.mode !== 'flying') return;
+  if ((themeKey !== 'ethereal' && !onboarding.wordsActive) || state.mode !== 'flying') return;
   const caught = wordTiles.update(dt, plane, camera);
-  if (caught) catchWord(caught.tile.word, caught.tile.group.position);
-  // Always keep a fresh handful of words somewhere ahead: the next cluster
-  // appears on the horizon as you reach the current one.
+  if (caught) {
+    catchWord(caught.tile.word, caught.tile.group.position);
+    state.nextCluster = state.time + 0.5;
+  }
+  // One handful at a time, always offered for the sentence as it stands:
+  // the next appears on the horizon a moment after you catch (or pass) one.
   const ahead = wordTiles.aheadCluster(plane);
-  const near = ahead && ahead.tiles.some((t) => t.state === 'live' && t.group.position.distanceTo(plane.position) < 90);
-  const live = wordTiles.clusters.filter((c) => !c.done).length;
-  if ((!ahead || (near && live < 2)) && state.time > state.nextCluster) {
-    const words = offerWords(Math.random, {
-      lastPos: poem.lastPos,
-      mood: state.mood,
-      lineLength: poem.current.length,
-      avoid: poem.recent(),
-      count: window.innerWidth < 600 ? 3 : 4,
-    });
-    wordTiles.spawn(plane, words, (ahead ? 250 : 160) + plane.speed * 2);
-    state.nextCluster = state.time + 1.5;
+  if (!ahead && state.time > state.nextCluster) {
+    const words = poem.offer(Math.random, window.innerWidth < 600 ? 3 : 4);
+    if (words.length) wordTiles.spawn(plane, words, 150 + plane.speed * 2.2);
+    state.nextCluster = state.time + 0.6;
   }
 }
+
+// Each part of speech has its own voice.
+const AUDIO_POS = { noun: 'noun', nouns: 'noun', v: 'verb', verb: 'verb', ved: 'verb', ving: 'verb', adj: 'adj', det: 'art', dets: 'art', subj: 'pron', prep: 'prep', adv: 'adv', phrase: 'adj', closer: 'adj', lit: 'art' };
 
 function catchWord(word, position) {
   const color = POS_COLORS[word.pos] ?? '#ffffff';
   bursts.emit(position, plane.camForward, [color, '#ffffff', '#fff4d6'], 60, 4, 8);
   feedback.haptic(18);
-  if (word.pos === 'break') {
-    const text = poem.newLine();
-    if (text) readLine(text);
-  } else {
-    poem.add(word);
+  // A new form while a finished poem is on the door: keep it first.
+  if (word.pos === 'form' && poem.complete) poem.keep();
+  const res = poem.add(word);
+  if (res.stale) {
+    feedback.popup(position, "doesn't fit here", '#d8d2e6');
+    updatePoemUi();
+    return;
+  }
+  onboarding.onWord(res);
+  if (res.formChosen) {
+    const f = FORMS[res.formChosen];
+    feedback.popup(position, `✦ ${f.label}`, '#ffffff', true);
+    showToast(`${f.label}: ${f.blurb}`);
+    audio.arrive();
+    state.lineFreqs = [];
+  } else if (word.pos !== 'break') {
     journeys.track('word');
     bumpFlow('word');
-    state.lineFreqs.push(audio.word(word.pos, poem.current.length - 1, panOf(position) * 0.6));
+    state.lineFreqs.push(audio.word(AUDIO_POS[word.pos] ?? 'noun', state.lineFreqs.length, panOf(position) * 0.6));
     audio.magnet();
     feedback.popup(position, word.w, color, true);
-    // The mood drifts with what you choose, so imagery gathers without being forced.
-    if (word.moods.length && Math.random() < 0.6) state.mood = word.moods[0];
-    else if (Math.random() < 0.2) state.mood = MOODS[Math.floor(Math.random() * MOODS.length)];
     resonate(word);
   }
+  if (res.poemDone) readPoem();
+  else if (res.lineDone) readLine(poem.lastLineText());
   updatePoemUi();
 }
 
 /** A finished line is read back: shown large, with its notes replayed. */
 function readLine(text) {
+  if (!text) return;
   const el = $('reading');
   el.textContent = text;
-  el.classList.remove('show');
+  el.classList.remove('show', 'poem');
   void el.offsetWidth;
   el.classList.add('show');
   audio.readLine(state.lineFreqs.filter(Boolean));
   state.lineFreqs = [];
   feedback.flash('#f3e8ff', 0.3);
+}
+
+/** A finished poem: the whole thing is read back, then kept. */
+function readPoem() {
+  const title = poem.keep();
+  const el = $('reading');
+  el.textContent = `${title}\n\n${poem.text()}`;
+  el.classList.remove('show', 'poem');
+  void el.offsetWidth;
+  el.classList.add('show', 'poem');
+  audio.chainComplete(8);
+  audio.readLine(state.lineFreqs.filter(Boolean));
+  state.lineFreqs = [];
+  feedback.flash('#fff4c2', 0.4);
+  journeys.track('word', 3);
+  showToast(`Poem kept: “${title}” · ✎ to retitle, share or save it`);
 }
 
 // Some words echo into the world around you.
@@ -467,7 +507,7 @@ const moonSprite = (() => {
 })();
 
 function resonate(word) {
-  const echo = ECHOES.find((e) => e.words.includes(word.w));
+  const echo = ECHOES.find((e) => e.words.includes(word.base ?? word.w) || e.words.includes(word.w));
   if (!echo) return;
   state.echoes[echo.name] = echo.name === 'moon' || echo.name === 'night' ? 30 : 12;
   const p = plane.position;
@@ -646,6 +686,10 @@ function renderJourneys() {
       `<button data-paper="${p.id}" class="${p.id === journeys.paper ? 'on' : ''}" ${unlocked.has(p.id) ? '' : 'disabled'}>${p.name}${unlocked.has(p.id) ? '' : ` · ${p.stamps}✦`}</button>`,
   ).join('');
 }
+$('flight-school').addEventListener('click', () => {
+  togglePause();
+  if (!onboarding.active) startFlightSchool();
+});
 $('papers').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-paper]');
   if (!b || b.disabled) return;
@@ -789,6 +833,7 @@ function frame(now) {
     animals.update(dt, plane);
   }
   tendWords(dt);
+  if (state.mode === 'flying') onboarding.update(dt);
   tendEchoes(dt);
   state.rainbow = Math.max(0, state.rainbow - dt);
   TRAIL_RAINBOW.value = Math.min(1, state.rainbow);
@@ -893,6 +938,8 @@ function start() {
   $('hud').classList.remove('hidden');
   updatePaws();
   renderJourneys();
+  // First flight: Flight School teaches steering, rings and sentences.
+  if (!Onboarding.seen) setTimeout(() => state.mode === 'flying' && !onboarding.active && startFlightSchool(), 900);
 }
 
 let toastTimer = 0;
@@ -972,18 +1019,35 @@ function closePoem() {
 $('poem-btn').addEventListener('click', openPoem);
 $('open-poem').addEventListener('click', openPoem);
 $('poem-close').addEventListener('click', closePoem);
-$('poem-undo').addEventListener('click', () => (poem.undo(), poem.renderDoor()));
-$('poem-line').addEventListener('click', () => {
-  const t = poem.newLine();
-  if (t) state.lineFreqs = [];
+$('poem-undo').addEventListener('click', () => (poem.undo(), poem.renderDoor(), updatePoemUi()));
+$('poem-finish').addEventListener('click', () => {
+  if (!poem.finish()) return;
+  poem.renderDoor();
+  showToast(`Poem kept: “${poem.keep()}”`);
+  updatePoemUi();
+});
+$('poem-titles').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-title]');
+  if (!b) return;
+  poem.title = b.dataset.title;
+  // Update the kept copy if this poem was already saved.
+  if (poem.complete && poem.saved[0]?.text === poem.text()) {
+    poem.saved[0].title = poem.title;
+    try {
+      localStorage.setItem('paperplanes.poems', JSON.stringify(poem.saved));
+    } catch {
+      /* storage unavailable */
+    }
+  }
   poem.renderDoor();
 });
 $('poem-keep').addEventListener('click', () => {
   if (poem.isEmpty) return;
-  poem.keep();
+  if (!poem.complete) poem.keep();
   poem.reset();
   poem.renderDoor();
-  showToast('Poem kept. A blank fridge door awaits.');
+  updatePoemUi();
+  showToast('A blank fridge door awaits. Fly through a form to begin.');
 });
 $('poem-share').addEventListener('click', async () => {
   const r = await poem.share();
@@ -1025,9 +1089,8 @@ screen.orientation?.addEventListener?.('change', () => input.recenter());
 window.addEventListener('orientationchange', () => input.recenter());
 window.addEventListener('keydown', (e) => {
   if (state.mode === 'title' && (e.code === 'Enter' || e.code === 'Space')) start();
-  else if (state.mode === 'flying' && e.code === 'Enter' && !poem.isEmpty) {
-    const t = poem.newLine();
-    if (t) readLine(t);
+  else if (state.mode === 'flying' && e.code === 'Enter' && !poem.isEmpty && poem.c.atEndPoint) {
+    catchWord({ w: '↵', pos: 'break' }, tmpV.copy(plane.position).addScaledVector(plane.camForward, 10));
   }
   if (state.mode === 'flying' && e.code === 'Backspace') {
     poem.undo();
@@ -1090,6 +1153,7 @@ async function boot() {
 }
 
 requestAnimationFrame(frame);
+window.__onb = onboarding;
 window.__paperplanes = { flow, air, obstacles, journeys, doRoll, tendFlow, state, renderer, plane, world, camera, foliage, input, chaseCamera, rings, animals, onRing, travel, wordTiles, poem, catchWord, tendWords };
 boot().catch((err) => {
   console.error(err);

@@ -8,14 +8,16 @@ const texCache = new Map();
 
 /** A fridge-magnet tile: off-white strip, serif word, a hint of colour for its part of speech. */
 export function tileTexture(word) {
-  const key = `${word.w}|${word.pos}`;
+  const key = `${word.w}|${word.pos}|${word.badge ?? ''}`;
   if (texCache.has(key)) return texCache.get(key);
   const font = '600 96px Fraunces, Georgia, "Times New Roman", serif';
   const c = document.createElement('canvas');
   const g = c.getContext('2d');
   g.font = font;
-  const label = word.pos === 'break' ? '↵' : word.w;
-  const tw = Math.ceil(g.measureText(label).width);
+  // Forms read like a title card; badges mark rhymes, echoes and phrases.
+  const label = word.pos === 'break' ? '↵ new line' : word.pos === 'form' ? `✦ ${word.w}` : word.w;
+  const badge = { rhyme: '♪', echo: '↺', phrase: '❝' }[word.badge] ?? '';
+  const tw = Math.ceil(g.measureText(label).width) + (badge ? 60 : 0);
   const pad = 46;
   c.width = tw + pad * 2;
   c.height = 176;
@@ -24,7 +26,8 @@ export function tileTexture(word) {
   ctx.fillStyle = 'rgba(40, 30, 60, 0.25)';
   roundRect(ctx, 8, 12, c.width - 12, c.height - 16, 10);
   ctx.fill();
-  ctx.fillStyle = word.pos === 'break' ? '#2a2540' : '#fbf8f1';
+  const dark = word.pos === 'break' || word.pos === 'form';
+  ctx.fillStyle = dark ? '#2a2540' : word.pos === 'phrase' || word.pos === 'closer' ? '#fff4d8' : '#fbf8f1';
   roundRect(ctx, 4, 6, c.width - 12, c.height - 18, 10);
   ctx.fill();
   ctx.fillStyle = POS_COLORS[word.pos] ?? '#ddd';
@@ -32,8 +35,13 @@ export function tileTexture(word) {
   ctx.font = font;
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'center';
-  ctx.fillStyle = word.pos === 'break' ? '#fbf8f1' : '#1d1a26';
-  ctx.fillText(label, (c.width - 8) / 2, c.height / 2 - 6);
+  ctx.fillStyle = dark ? '#fbf8f1' : '#1d1a26';
+  ctx.fillText(label, (c.width - 8) / 2 - (badge ? 28 : 0), c.height / 2 - 6);
+  if (badge) {
+    ctx.font = '700 64px Georgia, serif';
+    ctx.fillStyle = word.badge === 'rhyme' ? '#c9772a' : word.badge === 'echo' ? '#7a62c9' : '#b58a2a';
+    ctx.fillText(badge, c.width - pad - 18, c.height / 2 - 4);
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;

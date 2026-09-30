@@ -35,6 +35,19 @@
       <button id="recenter" class="hud-btn hidden" aria-label="Recenter tilt">◎ Level</button>
     </div>
     <div id="toast"></div>
+    <div id="coach" class="coach hidden" role="status" aria-live="polite">
+      <div class="coach-top"><span class="coach-step"></span><button class="coach-skip">Skip</button></div>
+      <div class="coach-body">
+        <div class="coach-hint"><span class="h-a"></span><span class="h-b"></span></div>
+        <div>
+          <div class="coach-title"></div>
+          <div class="coach-text"></div>
+        </div>
+      </div>
+      <div class="coach-bar"><i></i></div>
+      <div class="coach-dots"></div>
+      <button class="coach-go hidden">Let's fly</button>
+    </div>
     <div id="reading"></div>
     <div id="poem-strip" class="hidden"></div>
 
@@ -57,7 +70,7 @@
           <li><b>Flow</b> skim low, slip past trees, ride thermals and wind rivers</li>
           <li><b>Rings</b> gold gusts · <span style="color:#3ab8ff">⚡ swift</span> · <span style="color:#d05ad0">★ prism</span> · <span style="color:#ff5fa0">↻ flip</span> · <span style="color:#9a6bff">◎ portal</span></li>
           <li><b>Explore</b> find all 8 animals hiding in the landscape</li>
-          <li><b>Write</b> word portals lead to Dreaming Hours, where you catch floating words to make a poem</li>
+          <li><b>Write</b> in Dreaming Hours, pick a form, then fly through words: ♪ rhymes, ↺ echoes, ❝ phrases</li>
         </ul>
       </div>
     </div>
@@ -80,6 +93,7 @@
         <div class="menu">
           <button id="resume" class="primary">Keep flying</button>
           <button id="open-poem">✎ Your poem</button>
+          <button id="flight-school">✈ Flight School</button>
           <button id="new-world">New world</button>
           <button id="gyro-toggle" class="hidden">Tilt steering: on</button>
         </div>
@@ -91,15 +105,16 @@
         <h2>Your poem</h2>
         <p class="sub">Written in flight, one word at a time.</p>
         <div id="poem-door" class="door"></div>
+        <div id="poem-titles-wrap" class="hidden"><div class="door-label">Title</div><div id="poem-titles" class="papers"></div></div>
         <div class="door-tools">
-          <button id="poem-undo">↶ Undo word</button>
-          <button id="poem-line">↵ New line</button>
+          <button id="poem-undo">↶ Undo</button>
+          <button id="poem-finish">✦ Finish poem</button>
           <button id="poem-share">Share / copy</button>
           <button id="poem-image">Save image</button>
         </div>
         <div class="menu">
           <button id="poem-close" class="primary">Keep flying</button>
-          <button id="poem-keep">Keep this poem &amp; start another</button>
+          <button id="poem-keep">Start a new poem</button>
         </div>
         <div id="poem-saved-wrap" class="hidden">
           <h3>Kept poems</h3>
