@@ -164,7 +164,10 @@ export class WordTiles {
         if (t.state === 'live') {
           // Unfold into place, then bob gently.
           const grow = Math.min(1, age / 1.2);
-          g.scale.setScalar(0.01 + 0.99 * (1 - (1 - grow) ** 3));
+          // Flight School nudges the tile that fits with a little bounce.
+          const bounce = t.nudge ? 1 + 0.16 * Math.abs(Math.sin(this.time * 4.5)) : 1;
+          g.scale.setScalar((0.01 + 0.99 * (1 - (1 - grow) ** 3)) * bounce);
+          g.userData.halo.material.opacity = t.nudge ? 0.55 + 0.35 * Math.abs(Math.sin(this.time * 4.5)) : 0.55;
           g.position.set(
             t.base.x + Math.sin(this.time * 0.4 + t.phase) * 1.2,
             t.base.y + Math.sin(this.time * 0.7 + t.phase) * 1.5,

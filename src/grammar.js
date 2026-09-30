@@ -217,6 +217,12 @@ export class Composer {
     return this.lineIndex;
   }
 
+  /** Lines already finished (the current one only once the poem is complete). */
+  get finished() {
+    const done = this.complete ? this.lines : this.lines.slice(0, -1);
+    return done.filter((l) => l.some((t) => !t.lit));
+  }
+
   /** Index of the current line among real (non-stanza-gap) lines. */
   get lineIndex() {
     return this.lines.slice(0, -1).filter((l) => l.some((t) => !t.lit)).length;

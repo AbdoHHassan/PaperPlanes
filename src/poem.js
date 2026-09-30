@@ -69,8 +69,9 @@ export class Poem {
   }
 
   lastLineText() {
-    const lines = this.c.lines.filter((l) => l.some((t) => !t.lit));
-    const l = this.c.complete ? lines.at(-1) : lines.at(-2) ?? lines.at(-1);
+    // The line just finished: never the one in progress, even when the new
+    // line so far holds only glue words ("there is").
+    const l = this.c.finished.at(-1);
     return l ? lineText(l) : '';
   }
 
@@ -131,8 +132,7 @@ export class Poem {
     }
     s.appendChild(head);
 
-    const lines = c.lines.filter((l) => l.some((t) => !t.lit));
-    const prev = c.complete ? lines.at(-2) : lines.at(-2);
+    const prev = c.finished.at(-1);
     if (prev && !c.complete) {
       const p = document.createElement('div');
       p.className = 'strip-prev';
@@ -141,7 +141,7 @@ export class Poem {
     }
     const row = document.createElement('div');
     row.className = 'strip-row';
-    const cur = c.complete ? lines.at(-1) ?? [] : c.current;
+    const cur = c.complete ? c.finished.at(-1) ?? [] : c.current;
     const lastChosen = cur.findLastIndex((t) => !t.lit);
     cur.forEach((t, i) => {
       if (t.pos === 'stanza') return;

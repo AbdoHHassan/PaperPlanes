@@ -84,7 +84,7 @@ const air = new Air(scene);
 const flow = new Flow();
 const journeys = new Journeys();
 const onboarding = new Onboarding({
-  plane, input, rings, world, poem, wordTiles, audio, feedback,
+  scene, plane, input, rings, world, poem, wordTiles, audio, feedback,
   onFinish: (skipped) => {
     document.body.classList.remove('coaching');
     updatePoemUi();
@@ -964,6 +964,8 @@ function togglePause() {
     $('paused').classList.add('hidden');
     $('poem-view').classList.add('hidden');
     audio.ctx?.resume();
+    // The phone may be held differently after a break: re-level to the grip.
+    if (input.gyro.enabled) input.recenter();
   }
 }
 
