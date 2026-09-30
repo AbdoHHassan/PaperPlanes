@@ -115,9 +115,14 @@ Mumtaza Mehri (single words only; no lines are quoted).
 
 The first flight is a short guided run: bank to turn, climb and dive, catch a
 gust, thread three rings, and write a first line from four word clusters.
-Every instruction is worded for the device you're using (mouse, keyboard,
-tilt or touch) and follows along if you switch. It can be skipped, and
-replayed from the pause menu.
+It is shown in the world rather than told: a glowing ghost paper plane flies
+just ahead and performs each move, chevron lanterns to either side (or above
+and below) light up gold as you copy it, a golden path of light marches
+towards the next ring or word, and the word that fits the sentence bounces.
+The ghost steps back while you're doing it right and calls to you if you
+stall. A short caption, worded for the device you're using (mouse, keyboard,
+tilt or touch), sits alongside. It can be skipped, and replayed from the
+pause menu.
 
 ## Running it
 
@@ -171,6 +176,7 @@ Add `?low` or `?high` to the URL to force a quality tier (touch devices default 
 | `src/lexicon.js` | The word magnets by part of speech, register (lyric, wild, pop, genz, news) and mood, plus phrase magnets. |
 | `src/grammar.js` | Sentence patterns, poem forms, inflection, syllables and rhyme, and the Composer that picks each handful. |
 | `src/onboarding.js` | Flight School: the device-aware first-flight tutorial. |
+| `src/guide.js` | Flight School's in-world teacher: the ghost plane, lanterns and golden path. |
 | `src/wordtiles.js` | 3D word magnets: canvas-drawn tiles that face you, drift, and get caught. |
 | `src/poem.js` | The poem: magnet strip, fridge-door view, saving, sharing and image export. |
 | `src/audio.js` | All sound, synthesised with WebAudio (no audio files): a generative score per world (key, mode, tempo, pad and melody voices on a look-ahead beat scheduler, with a rhythm layer that swells with gusts and combos); ring, word and discovery sounds pitched to the current chord; wind panned with your bank, paper flutter, ground rush, water; birdsong, crickets, wind chimes and animal calls; a generated reverb, music/effects buses, compressor and limiter. Music and Sounds sliders live in the pause menu. |

@@ -84,7 +84,7 @@ const air = new Air(scene);
 const flow = new Flow();
 const journeys = new Journeys();
 const onboarding = new Onboarding({
-  plane, input, rings, world, poem, wordTiles, audio, feedback,
+  scene, plane, input, rings, world, poem, wordTiles, audio, feedback,
   onFinish: (skipped) => {
     document.body.classList.remove('coaching');
     updatePoemUi();

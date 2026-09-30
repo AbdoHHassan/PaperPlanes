@@ -6,29 +6,32 @@
  * you switch.
  */
 
+import * as THREE from 'three';
 import { Composer } from './grammar.js';
+import { Guide } from './guide.js';
 
 const STORE = 'paperplanes.onboarded';
+const GUIDE_MODE = { steer: 'x', pitch: 'y', gust: 'press', rings: 'target', words: 'target', done: 'celebrate' };
 
 const STEPS = [
   {
     id: 'steer',
     group: 'Steer',
-    title: 'Bank to turn',
+    title: 'Follow the glowing plane',
     text: {
-      mouse: 'Move your mouse left and right of centre to bank and turn.',
-      keys: 'Press A / D (or ← →) to bank and turn.',
-      tilt: 'Tilt your phone left and right, like a steering wheel.',
-      touch: 'Drag left and right anywhere on the screen.',
+      mouse: 'Mouse left and right to bank. Light both lanterns.',
+      keys: 'A / D (or ← →) to bank. Light both lanterns.',
+      tilt: 'Tilt your phone left and right. Light both lanterns.',
+      touch: 'Drag left and right. Light both lanterns.',
     },
     hint: 'x',
   },
   {
     id: 'pitch',
     group: 'Steer',
-    title: 'Climb and dive',
+    title: 'Climb and dive with it',
     text: {
-      mouse: 'Move the mouse up to climb, down to dive.',
+      mouse: 'Mouse up to climb, down to dive.',
       keys: 'W / S (or ↑ ↓) to climb and dive.',
       tilt: 'Tip the top edge towards you to climb, away to dive.',
       touch: 'Drag up to climb, down to dive.',
@@ -38,12 +41,12 @@ const STEPS = [
   {
     id: 'gust',
     group: 'Steer',
-    title: 'Catch a gust',
+    title: 'Surge like it does',
     text: {
-      mouse: 'Hold the mouse button for a gust of speed.',
-      keys: 'Hold Space for a gust of speed.',
-      tilt: 'Touch and hold the screen for a gust of speed.',
-      touch: 'Hold a second finger on the screen for a gust.',
+      mouse: 'Hold the mouse button for a gust.',
+      keys: 'Hold Space for a gust.',
+      tilt: 'Touch and hold the screen for a gust.',
+      touch: 'Hold a second finger down for a gust.',
     },
     hint: 'press',
   },
@@ -52,10 +55,10 @@ const STEPS = [
     group: 'Rings',
     title: 'Thread the rings',
     text: {
-      mouse: 'Fly through the three glowing rings ahead. The arrow points to them.',
-      keys: 'Fly through the three glowing rings ahead. The arrow points to them.',
-      tilt: 'Fly through the three glowing rings ahead. Small tilts are enough.',
-      touch: 'Fly through the three glowing rings ahead. The arrow points to them.',
+      mouse: 'Follow the ghost and the golden path through all three.',
+      keys: 'Follow the ghost and the golden path through all three.',
+      tilt: 'Follow the ghost through all three. Small tilts are enough.',
+      touch: 'Follow the ghost and the golden path through all three.',
     },
     hint: 'ring',
   },
@@ -64,10 +67,10 @@ const STEPS = [
     group: 'Words',
     title: 'Write a line',
     text: {
-      mouse: 'Steer through a word to add it. The dashed box shows what your sentence needs next.',
-      keys: 'Steer through a word to add it. The dashed box shows what your sentence needs next.',
-      tilt: 'Tilt through a word to add it. The dashed box shows what your sentence needs next.',
-      touch: 'Drag through a word to add it. The dashed box shows what your sentence needs next.',
+      mouse: 'Fly through the bouncing word. The dashed box below shows what the sentence needs.',
+      keys: 'Fly through the bouncing word. The dashed box below shows what the sentence needs.',
+      tilt: 'Tilt through the bouncing word. The dashed box below shows what the sentence needs.',
+      touch: 'Drag through the bouncing word. The dashed box below shows what the sentence needs.',
     },
     hint: 'word',
   },
@@ -76,10 +79,10 @@ const STEPS = [
     group: 'Ready',
     title: 'You can fly',
     text: {
-      mouse: '◎ Portals lead to new worlds. Portals with a word in them lead to Dreaming Hours, where you write whole poems.',
-      keys: '◎ Portals lead to new worlds. Portals with a word in them lead to Dreaming Hours, where you write whole poems.',
-      tilt: '◎ Portals lead to new worlds. Portals with a word in them lead to Dreaming Hours, where you write whole poems.',
-      touch: '◎ Portals lead to new worlds. Portals with a word in them lead to Dreaming Hours, where you write whole poems.',
+      mouse: '◎ Portals lead to new worlds. Portals holding a word lead to Dreaming Hours, where you write whole poems.',
+      keys: '◎ Portals lead to new worlds. Portals holding a word lead to Dreaming Hours, where you write whole poems.',
+      tilt: '◎ Portals lead to new worlds. Portals holding a word lead to Dreaming Hours, where you write whole poems.',
+      touch: '◎ Portals lead to new worlds. Portals holding a word lead to Dreaming Hours, where you write whole poems.',
     },
     hint: 'none',
   },
@@ -87,11 +90,13 @@ const STEPS = [
 
 export class Onboarding {
   /**
-   * ctx: { plane, input, rings, world, poem, wordTiles, audio, feedback, onFinish }
+   * ctx: { scene, plane, input, rings, world, poem, wordTiles, audio, feedback, onFinish }
    */
   constructor(ctx) {
     this.ctx = ctx;
     this.active = false;
+    this.guide = new Guide(ctx.scene, ctx.plane);
+    this._path = [];
     this.el = document.getElementById('coach');
     this.el.querySelector('.coach-skip').addEventListener('click', () => this.finish(true));
     this.el.querySelector('.coach-go').addEventListener('click', () => this.finish(false));
@@ -112,6 +117,7 @@ export class Onboarding {
     rings.suppress = true;
     world.respawnRings(); // clears the sky of ordinary chains
     this.el.classList.remove('hidden');
+    this.guide.show();
     this._next();
   }
 
@@ -130,8 +136,11 @@ export class Onboarding {
     this.t = 0;
     this.acc = { left: 0, right: 0, up: 0, down: 0, boost: 0 };
     this.doneAt = undefined;
+    this.idle = 0;
+    this.lastProgress = 0;
     const s = this.step;
     if (!s) return this.finish(false);
+    this.guide.setMode(GUIDE_MODE[s.id]);
     if (s.id === 'rings') this._layRings();
     if (s.id === 'words') this._beginSentence();
     this.el.querySelector('.coach-go').classList.toggle('hidden', s.id !== 'done');
@@ -230,6 +239,7 @@ export class Onboarding {
           this._endSentence();
           this._advance();
         }
+        this._tendGuide(dt);
         return;
       }
       const c = this.ctx.poem.c;
@@ -242,9 +252,61 @@ export class Onboarding {
       this._advance();
       return;
     }
+    this._tendGuide(dt);
     // Keep the wording in step with the device being used.
     if (input.device !== this.lastDevice) this._render(true);
     else this._renderProgress();
+  }
+
+  /** Drives the ghost plane, lanterns and golden path for this step. */
+  _tendGuide(dt) {
+    const { plane, input, rings, wordTiles, poem } = this.ctx;
+    const s = this.step;
+    const a = this.acc;
+    if (this.progress > this.lastProgress + 1e-3) this.idle = 0;
+    else this.idle += dt;
+    this.lastProgress = this.progress;
+    const info = { idle: this.idle, coached: false, fills: null, target: null, path: null };
+    if (s.id === 'steer') {
+      info.fills = [a.right / 1.2, a.left / 1.2];
+      info.coached = Math.abs(plane.roll) > 0.25;
+    } else if (s.id === 'pitch') {
+      info.fills = [a.up / 0.9, a.down / 0.9];
+      info.coached = plane.pitch > 0.18 || plane.pitch < -0.14;
+    } else if (s.id === 'gust') {
+      info.coached = !!input.boost;
+    } else if (s.id === 'rings') {
+      const left = (this.tutorialRings ?? []).filter((r) => rings.active.has(r) && !r.dying);
+      if (left.length) {
+        info.target = left[0].mesh.position;
+        info.path = this._pathFrom(plane, left.map((r) => r.mesh.position));
+      }
+    } else if (s.id === 'words' && this.doneAt === undefined) {
+      const tile = this._fittingTile(wordTiles.aheadCluster(plane), poem.c);
+      if (tile) {
+        info.target = tile.group.position;
+        info.path = this._pathFrom(plane, [tile.group.position]);
+      }
+    }
+    this.guide.setMode(info.target || s.id !== 'words' ? GUIDE_MODE[s.id] : 'idle');
+    this._lastInfo = info;
+    this.guide.update(dt, info);
+  }
+
+  _pathFrom(plane, points) {
+    const start = (this._start ??= new THREE.Vector3()).copy(plane.position).addScaledVector(plane.camForward, 7);
+    this._path.length = 0;
+    this._path.push(start, ...points);
+    return this._path;
+  }
+
+  /** The tile in a cluster that fits the sentence next; it bounces to be picked. */
+  _fittingTile(cluster, c) {
+    if (!cluster) return null;
+    const live = cluster.tiles.filter((t) => t.state === 'live');
+    const pick = live.find((t) => t.word.pos === c.nextSlot) ?? (c.atEndPoint ? live.find((t) => t.word.pos === 'break') : null) ?? live[0];
+    for (const t of cluster.tiles) t.nudge = t === pick;
+    return pick;
   }
 
   _render(full = false) {
@@ -280,6 +342,7 @@ export class Onboarding {
     rings.suppress = false;
     world.respawnRings();
     this.el.classList.add('hidden');
+    this.guide.hide();
     try {
       localStorage.setItem(STORE, '1');
     } catch {
