@@ -346,3 +346,113 @@ button.ghost {
 }
 .seg button + button { border-left: 1px solid rgba(35, 49, 63, 0.12); }
 .seg button.on { background: var(--ink); color: var(--paper); }
+
+/* Poem composer: form header, glue words, the next-slot placeholder */
+.strip-head {
+  font: 700 11px 'Nunito', sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #fff; opacity: 0.85; margin-bottom: 5px; text-shadow: 0 1px 6px rgba(60, 40, 90, 0.5);
+}
+.magnet.lit { background: #f1ece2; color: #5e586c; font-weight: 400; font-style: italic; }
+.magnet.punct { padding: 4px 5px 6px; margin-left: -2px; background: #f1ece2; }
+.magnet.ghost {
+  background: rgba(255, 255, 255, 0.18); color: #fff; border: 1.5px dashed rgba(255, 255, 255, 0.8);
+  border-bottom: 3px solid var(--pos, #ddd); font: italic 400 15px 'Fraunces', Georgia, serif;
+  box-shadow: none; animation: breathe 2.2s ease-in-out infinite;
+}
+@keyframes breathe { 50% { opacity: 0.55; } }
+.strip-or { font: italic 400 14px 'Fraunces', Georgia, serif; color: #fff; opacity: 0.8; margin-left: 6px; }
+#reading.poem {
+  top: 42%; white-space: pre-line; font-size: clamp(18px, 2.8vw, 30px); line-height: 1.35;
+  animation-duration: 11s;
+}
+.door-title { font: italic 600 22px 'Fraunces', Georgia, serif; margin: 0 0 10px 4px; }
+.door-gap { height: 12px; }
+.door-label { font: 700 12px 'Nunito', sans-serif; opacity: 0.7; margin-bottom: 6px; }
+#poem-titles button { font-family: 'Fraunces', Georgia, serif; font-style: italic; text-transform: none; }
+
+/* ------------------------------------------------------------ Flight School */
+.coach {
+  position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 7;
+  width: min(440px, calc(100vw - 32px)); padding: 12px 14px 12px;
+  background: rgba(251, 248, 240, 0.94); color: var(--ink); border-radius: 16px;
+  box-shadow: 0 12px 34px rgba(30, 60, 90, 0.25); backdrop-filter: blur(6px);
+}
+.coach.pop { animation: coach-pop 0.45s cubic-bezier(0.2, 1.4, 0.4, 1); }
+@keyframes coach-pop { 0% { transform: translateX(-50%) translateY(-10px) scale(0.96); opacity: 0.4; } }
+.coach-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.coach-step { font: 700 11px 'Nunito', sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: #c9772a; }
+.coach-skip { font: 700 12px 'Nunito', sans-serif; background: none; border: none; color: var(--ink); opacity: 0.55; cursor: pointer; padding: 4px 6px; }
+.coach-body { display: flex; gap: 12px; align-items: center; }
+.coach-title { font: 600 19px 'Fraunces', Georgia, serif; margin-bottom: 2px; }
+.coach-text { font-size: 14px; line-height: 1.4; }
+.coach-bar { height: 5px; margin-top: 10px; border-radius: 3px; background: rgba(35, 49, 63, 0.1); overflow: hidden; }
+.coach-bar i { display: block; height: 100%; background: linear-gradient(90deg, #f2a93b, #ffd27a); transform-origin: left; transform: scaleX(0); transition: transform 0.2s; }
+.coach-dots { display: flex; gap: 5px; justify-content: center; margin-top: 8px; }
+.coach-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(35, 49, 63, 0.18); }
+.coach-dots i.on { background: #c9772a; }
+.coach-dots i.done { background: #86dbb0; }
+.coach-go {
+  display: block; margin: 10px auto 0; font: 700 15px 'Nunito', sans-serif; padding: 10px 26px;
+  border-radius: 999px; border: none; background: var(--ink); color: var(--paper); cursor: pointer;
+}
+.coach.final .coach-bar { display: none; }
+body.coaching .journeys-hud { display: none; }
+
+/* The little animated device hint beside each instruction. */
+.coach-hint { position: relative; flex: 0 0 56px; height: 56px; border-radius: 12px; background: rgba(35, 49, 63, 0.06); }
+.coach-hint span { position: absolute; display: block; }
+/* mouse: a rounded body with a dot that moves */
+.coach-hint.dev-mouse .h-a { left: 18px; top: 10px; width: 20px; height: 32px; border: 2px solid #23313f; border-radius: 10px; }
+.coach-hint.dev-mouse .h-b { left: 26px; top: 16px; width: 4px; height: 7px; border-radius: 2px; background: #23313f; }
+.coach-hint.dev-mouse.hint-x .h-a, .coach-hint.dev-mouse.hint-x .h-b { animation: hx 1.6s ease-in-out infinite; }
+.coach-hint.dev-mouse.hint-y .h-a, .coach-hint.dev-mouse.hint-y .h-b { animation: hy 1.6s ease-in-out infinite; }
+/* keys: two key caps that press in turn */
+.coach-hint.dev-keys .h-a, .coach-hint.dev-keys .h-b {
+  top: 16px; width: 20px; height: 20px; border: 2px solid #23313f; border-radius: 5px; font: 700 11px 'Nunito', sans-serif;
+  text-align: center; line-height: 20px; animation: key 1.2s ease-in-out infinite;
+}
+.coach-hint.dev-keys .h-a { left: 5px; }
+.coach-hint.dev-keys .h-b { left: 29px; animation-delay: 0.6s; }
+.coach-hint.dev-keys.hint-x .h-a::after { content: 'A'; } .coach-hint.dev-keys.hint-x .h-b::after { content: 'D'; }
+.coach-hint.dev-keys.hint-y .h-a::after { content: 'W'; } .coach-hint.dev-keys.hint-y .h-b::after { content: 'S'; }
+.coach-hint.dev-keys.hint-press .h-a { width: 44px; left: 4px; } .coach-hint.dev-keys.hint-press .h-a::after { content: 'Space'; }
+.coach-hint.dev-keys.hint-press .h-b { display: none; }
+/* tilt: a phone that rocks */
+.coach-hint.dev-tilt .h-a { left: 19px; top: 8px; width: 18px; height: 36px; border: 2px solid #23313f; border-radius: 5px; }
+.coach-hint.dev-tilt.hint-x .h-a { animation: rock 1.8s ease-in-out infinite; }
+.coach-hint.dev-tilt.hint-y .h-a { animation: tip 1.8s ease-in-out infinite; }
+.coach-hint.dev-tilt .h-b { display: none; }
+/* touch: a fingertip that drags */
+.coach-hint.dev-touch .h-a { left: 20px; top: 20px; width: 16px; height: 16px; border-radius: 50%; background: #23313f; opacity: 0.8; }
+.coach-hint.dev-touch .h-b { left: 16px; top: 16px; width: 24px; height: 24px; border-radius: 50%; border: 2px solid rgba(35, 49, 63, 0.35); }
+.coach-hint.dev-touch.hint-x .h-a, .coach-hint.dev-touch.hint-x .h-b { animation: hx 1.6s ease-in-out infinite; }
+.coach-hint.dev-touch.hint-y .h-a, .coach-hint.dev-touch.hint-y .h-b { animation: hy 1.6s ease-in-out infinite; }
+/* press / gust: a pulsing press on mouse, tilt and touch */
+.coach-hint.hint-press:not(.dev-keys) .h-a { animation: press 1.2s ease-in-out infinite; }
+/* rings and words: a glowing ring / a magnet */
+.coach-hint.hint-ring .h-a, .coach-hint.hint-ring .h-b { display: none; }
+.coach-hint.hint-ring::after {
+  content: ''; position: absolute; inset: 12px; border-radius: 50%; border: 4px solid #ffd27a; box-shadow: 0 0 14px #ffb84a;
+  animation: press 1.6s ease-in-out infinite;
+}
+.coach-hint.hint-word .h-a, .coach-hint.hint-word .h-b, .coach-hint.hint-none .h-a, .coach-hint.hint-none .h-b { display: none; }
+.coach-hint.hint-word::after {
+  content: 'moon'; position: absolute; left: 6px; right: 6px; top: 18px; padding: 2px 0 4px; text-align: center;
+  font: 600 13px 'Fraunces', Georgia, serif; background: #fbf8f1; border-bottom: 3px solid #f7a6c8;
+  box-shadow: 1px 2px 0 rgba(40, 30, 60, 0.2); transform: rotate(-3deg); animation: press 1.6s ease-in-out infinite;
+}
+.coach-hint.hint-none::after { content: '✦'; position: absolute; inset: 0; text-align: center; line-height: 56px; font-size: 26px; color: #c9772a; }
+@keyframes hx { 0%, 100% { transform: translateX(-9px); } 50% { transform: translateX(9px); } }
+@keyframes hy { 0%, 100% { transform: translateY(-7px); } 50% { transform: translateY(7px); } }
+@keyframes rock { 0%, 100% { transform: rotate(-18deg); } 50% { transform: rotate(18deg); } }
+@keyframes tip { 0%, 100% { transform: perspective(80px) rotateX(-30deg); } 50% { transform: perspective(80px) rotateX(30deg); } }
+@keyframes key { 0%, 60%, 100% { transform: translateY(0); background: transparent; } 20% { transform: translateY(2px); background: #ffd27a; } }
+@keyframes press { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.86); opacity: 0.75; } }
+@media (max-width: 600px) {
+  .coach { top: 8px; padding: 10px 12px; }
+  .coach-title { font-size: 17px; }
+  .coach-text { font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) { .coach-hint *, .coach-hint::after { animation: none !important; } }
+body.coaching .combo { display: none; }
+@media (pointer: coarse) { .coach { top: 104px; } }

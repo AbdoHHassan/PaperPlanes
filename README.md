@@ -78,30 +78,46 @@ blueprint and gold leaf. Progress is kept between visits.
 
 ## Writing a poem in flight
 
-Half of all portals carry a word magnet. Fly through one and the word becomes
-the first of your poem as you enter **Dreaming Hours**, a pearl-and-lavender
-world where small clusters of word magnets drift ahead of you. You can also go
-straight there with **✎ Write a poem** on the title screen (or `?world=ethereal`).
+Half of all portals carry a word magnet: fly through one and you arrive in
+**Dreaming Hours**, and that word will find its way back to you. (Or choose
+**✎ Write a poem** on the title screen, or `?world=ethereal`.)
 
-- Steer through a word to catch it; it snaps onto the magnet strip. The words
-  you didn't choose drift away, and a fresh handful appears on the horizon.
-- Each cluster leans on what came before (after *the*, adjectives and nouns
-  are likely), shares a slowly drifting mood (water, fire, body, home, sky,
-  time, love, earth, signal), and always includes one wild card. Suffix tiles
-  (*-s*, *-ing*, *-ed*, *-ly*) glue onto the word before, like real magnets.
-- Fly through **↵** (or press Enter) to end a line: it's read back to you
-  with the notes of its words.
-- Some words echo into the world: *moon* raises a moon, *rain* and *river*
-  bring sparkle rain, *fire* sends up embers, *bloom* scatters petals, *wings*
-  calls the birds, *midnight* wakes the stars, *honey* turns the air gold.
-- **✎ poem** (or `O`) opens the fridge door: undo (also Backspace), new line,
-  share/copy, save as an image, or keep the poem and start another.
+**Structure.** A poem starts by flying through a form: *haiku* (5-7-5, with a
+syllable counter), *couplets* (rhyming pairs), *litany* (every line opens the
+same way), *letter* (*dear … yours,*) or *free verse*. Each line then follows
+one of ~20 sentence shapes (*the [adj] [noun] [verb]s* · *I [verb] you like a
+[noun]* · *what if the [noun] [verb]s* · *there is a [noun] in the [noun]*…).
+Glue words snap in on their own; you fly through the words that carry the
+meaning, and the strip shows what the sentence needs next as a dashed magnet
+(*a thing*, *what it does*, *where*). Verbs agree, nouns pluralise, *a* becomes
+*an*, so every line is grammatical: a basic poem takes about five minutes.
 
-The vocabulary takes its cues from the themes and diction of James Baldwin
-and Mumtaza Mehri (love as a fierce force, fire and water, witness, mercy,
-home; tongue and salt, sugar and gold, archives, satellites and static,
-grandmothers and moons), but it's only single words. The poems belong to
-whoever flies them.
+**Serendipity.** Each handful mixes words that fit the drifting mood with
+spice from a wider lexicon: wild adjectives (*feral, iridescent,
+holographic*), generic pop culture (*sequel, cliffhanger, side quest*), Gen Z
+lingo (*lowkey, unbothered, delulu, rent free*) and news nouns (*heatwave,
+forecast, telescope, deadline*), all general so none of them is a dead end.
+What you pick shapes what drifts in next. Phrase magnets (❝ *it's giving*,
+*plot twist:*, *in this economy,*) re-route a sentence; closers (*on repeat*,
+*after the credits*) end one.
+
+**Depth.** ♪ tiles rhyme (or slant-rhyme) with the line before; ↺ tiles bring
+back your own earlier words as refrains; ↵ ends a line wherever its shape
+allows. Each finished line is read back with its notes; a finished poem is read
+back whole, titled from its strongest image, and kept. On the fridge door (✎
+or `O`) you can undo (also Backspace), finish a free-verse poem, choose a
+title, share, or save it as an image.
+
+The lyric core takes its cues from the themes and diction of James Baldwin and
+Mumtaza Mehri (single words only; no lines are quoted).
+
+## Flight School
+
+The first flight is a short guided run: bank to turn, climb and dive, catch a
+gust, thread three rings, and write a first line from four word clusters.
+Every instruction is worded for the device you're using (mouse, keyboard,
+tilt or touch) and follows along if you switch. It can be skipped, and
+replayed from the pause menu.
 
 ## Running it
 
@@ -152,7 +168,9 @@ Add `?low` or `?high` to the URL to force a quality tier (touch devices default 
 | `src/fx.js` | Ring feedback: spark bursts, floating labels, screen flash, haptics. |
 | `src/animals.js` | Procedural low-poly animals: habitats, behaviours (grazing, fleeing, hopping, swimming, leaping, soaring) and discovery. |
 | `src/themes.js` | The six world themes (including the Dreaming Hours poem world): sky, light, fog, terrain and foliage palettes, and ambient particles. |
-| `src/words.js` | The word-magnet vocabulary (by part of speech and mood) and the grammar lean that picks each cluster. |
+| `src/lexicon.js` | The word magnets by part of speech, register (lyric, wild, pop, genz, news) and mood, plus phrase magnets. |
+| `src/grammar.js` | Sentence patterns, poem forms, inflection, syllables and rhyme, and the Composer that picks each handful. |
+| `src/onboarding.js` | Flight School: the device-aware first-flight tutorial. |
 | `src/wordtiles.js` | 3D word magnets: canvas-drawn tiles that face you, drift, and get caught. |
 | `src/poem.js` | The poem: magnet strip, fridge-door view, saving, sharing and image export. |
 | `src/audio.js` | All sound, synthesised with WebAudio (no audio files): a generative score per world (key, mode, tempo, pad and melody voices on a look-ahead beat scheduler, with a rhythm layer that swells with gusts and combos); ring, word and discovery sounds pitched to the current chord; wind panned with your bank, paper flutter, ground rush, water; birdsong, crickets, wind chimes and animal calls; a generated reverb, music/effects buses, compressor and limiter. Music and Sounds sliders live in the pause menu. |

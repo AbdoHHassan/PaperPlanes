@@ -6,7 +6,7 @@ import { value } from './settings.js';
 import { makeTile } from './wordtiles.js';
 
 // Words that open the way into the poem world.
-const GATE_WORDS = WORDS.filter((w) => w.pos === 'noun' || w.pos === 'adj');
+const GATE_WORDS = WORDS.filter((w) => (w.pos === 'noun' || w.pos === 'adj') && w.register === 'lyric');
 import { mulberry32, hash2 } from './noise.js';
 import { SOFT_SPRITE } from './effects.js';
 import { CHUNK } from './scatter.js';
@@ -252,6 +252,7 @@ export class Rings {
   spawnForChunk(cx, cz) {
     const r = mulberry32(hash2(cx, cz, 3 + getSeed() * 31));
     const list = [];
+    if (this.suppress) return list; // Flight School keeps the sky clear
     const guide = cx === 0 && cz === 0; // a first chain right in front of the start
     const nearSpawn = Math.hypot(cx, cz) < 1.5;
     if (nearSpawn && !guide) return list;
@@ -306,6 +307,18 @@ export class Rings {
       if (!this.collected.has(id)) list.push(this._make(id, 'portal', x, y, z, [Math.sin(a), 0, Math.cos(a)], word));
     }
     return list;
+  }
+
+  /** Flight School: a gentle, nearly straight chain of gold rings ahead. */
+  spawnTutorial(plane, n = 3) {
+    const f = plane.camForward;
+    const yaw = Math.atan2(f.x, f.z);
+    const x = plane.position.x + Math.sin(yaw) * 90;
+    const z = plane.position.z + Math.cos(yaw) * 90;
+    const r = () => 0.5; // no randomness: straight and friendly
+    const path = planChain(r, x, z, yaw, Array(n).fill('gold'), plane.position.y);
+    const stamp = Date.now();
+    return path.map((p, i) => this._make(`tutorial,${stamp},0,${i}`, 'gold', p.x, p.y, p.z, p.normal));
   }
 
   _make(id, type, x, y, z, normal, word = null) {

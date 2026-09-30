@@ -26,6 +26,7 @@ export class Input {
     this.touches = 0;
     this.mouseBoost = false;
     this.onDoubleTap = null; // (side: -1 left | 1 right) => void
+    this.lastKind = matchMedia('(pointer: coarse)').matches ? 'touch' : 'mouse'; // last input used
     this.lastTap = { t: 0, side: 0 };
 
     this.gyro = {
@@ -41,12 +42,14 @@ export class Input {
 
     window.addEventListener('keydown', (e) => {
       this.keys.add(e.code);
+      if (/^(Key[WASD]|Arrow|Space|Shift)/.test(e.code)) this.lastKind = 'keys';
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
 
     el.addEventListener('mousemove', (e) => {
+      if (Math.abs(e.movementX) + Math.abs(e.movementY) > 2) this.lastKind = 'mouse';
       this.pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
       this.pointer.y = -((e.clientY / window.innerHeight) * 2 - 1);
       this.pointer.active = true;
@@ -61,6 +64,7 @@ export class Input {
       'touchstart',
       (e) => {
         e.preventDefault();
+        this.lastKind = 'touch';
         const t = e.changedTouches[0];
         // Double-tap on the left or right half: barrel roll that way.
         const side = t.clientX < window.innerWidth / 2 ? -1 : 1;
@@ -154,6 +158,13 @@ export class Input {
       g.rollF = g.roll;
       g.pitchF = g.pitch;
     }
+  }
+
+  /** How the player is steering right now: 'mouse' | 'keys' | 'tilt' | 'touch'. */
+  get device() {
+    if (this.lastKind === 'keys') return 'keys';
+    if (this.usingGyro) return 'tilt';
+    return this.lastKind;
   }
 
   get usingKeyboard() {
