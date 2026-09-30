@@ -964,6 +964,8 @@ function togglePause() {
     $('paused').classList.add('hidden');
     $('poem-view').classList.add('hidden');
     audio.ctx?.resume();
+    // The phone may be held differently after a break: re-level to the grip.
+    if (input.gyro.enabled) input.recenter();
   }
 }
 

@@ -13,6 +13,9 @@ const DEG = Math.PI / 180;
 const ROLL_RANGE = 12 * DEG; // full bank at ~12° of steering-wheel tilt
 const PITCH_RANGE = 16 * DEG; // full climb/dive at ~16° of tip
 const TILT_DEAD = 1.2 * DEG;
+const ROLL_TRIM_MAX = 20 * DEG; // how crooked a grip calibration will accept as "level"
+const CALIB_SKIP = 250; // ms: ignore the first, often stale, sensor readings
+const CALIB_TIME = 350; // ms of readings averaged into the neutral grip
 
 export class Input {
   constructor(el) {
@@ -36,6 +39,8 @@ export class Input {
       roll: 0,
       pitch: 0,
       pitch0: null,
+      roll0: 0,
+      calib: null,
       rollF: 0,
       pitchF: 0,
     };
@@ -118,7 +123,7 @@ export class Input {
     }
     window.addEventListener('deviceorientation', this._onOrientation);
     this.gyro.enabled = true;
-    this.gyro.pitch0 = null; // calibrate on first reading
+    this.recenter(); // calibrate once the sensor settles
     return true;
   }
 
@@ -131,6 +136,7 @@ export class Input {
   /** Treat the current way the phone is held as "level flight". */
   recenter() {
     this.gyro.pitch0 = null;
+    this.gyro.calib = { t0: performance.now(), n: 0, roll: 0, pitch: 0 };
   }
 
   _orientation(e) {
@@ -153,11 +159,24 @@ export class Input {
     // top edge is tipped towards the player, relative to calibration.
     g.roll = Math.asin(Math.max(-1, Math.min(1, -sx)));
     g.pitch = Math.atan2(sy, uz);
-    if (g.pitch0 === null) {
-      g.pitch0 = g.pitch;
-      g.rollF = g.roll;
-      g.pitchF = g.pitch;
-    }
+    // Calibrate "level flight" to the grip: skip the first readings (iOS
+    // often sends a stale one), then average a few. Both bank and climb are
+    // measured from there, so a slightly crooked hold doesn't mean a turn.
+    const cal = g.calib;
+    if (cal) {
+      const age = performance.now() - cal.t0;
+      if (age < CALIB_SKIP) return;
+      cal.n++;
+      cal.roll += g.roll;
+      cal.pitch += g.pitch;
+      if (age >= CALIB_SKIP + CALIB_TIME && cal.n >= 3) {
+        g.roll0 = Math.max(-ROLL_TRIM_MAX, Math.min(ROLL_TRIM_MAX, cal.roll / cal.n));
+        g.pitch0 = cal.pitch / cal.n;
+        g.rollF = 0;
+        g.pitchF = 0;
+        g.calib = null;
+      }
+    } else if (g.pitch0 === null) this.recenter();
   }
 
   /** How the player is steering right now: 'mouse' | 'keys' | 'tilt' | 'touch'. */
@@ -187,7 +206,7 @@ export class Input {
     } else if (this.usingGyro) {
       // Low-pass the sensor so hand tremor doesn't reach the plane.
       const a = 1 - Math.exp(-dt * 10);
-      g.rollF += (g.roll - g.rollF) * a;
+      g.rollF += (g.roll - g.roll0 - g.rollF) * a;
       let dp = g.pitch - g.pitch0;
       if (dp > Math.PI) dp -= 2 * Math.PI;
       if (dp < -Math.PI) dp += 2 * Math.PI;
