@@ -11,7 +11,7 @@
 
 const DEG = Math.PI / 180;
 const ROLL_RANGE = 12 * DEG; // full bank at ~12° of steering-wheel tilt
-const PITCH_RANGE = 16 * DEG; // full climb/dive at ~16° of tip
+const PITCH_RANGE = 13 * DEG; // full climb/dive at ~13° of tip: a little up or down is enough
 const TILT_DEAD = 1.2 * DEG;
 const ROLL_TRIM_MAX = 20 * DEG; // how crooked a grip calibration will accept as "level"
 const CALIB_SKIP = 250; // ms: ignore the first, often stale, sensor readings
@@ -43,6 +43,10 @@ export class Input {
       calib: null,
       rollF: 0,
       pitchF: 0,
+      // Adaptive smoothing: still hands get a steady plane, quick tilts
+      // still answer at once.
+      fRoll: new OneEuro(),
+      fPitch: new OneEuro(),
     };
 
     window.addEventListener('keydown', (e) => {
@@ -136,11 +140,11 @@ export class Input {
   /** Treat the current way the phone is held as "level flight". */
   recenter() {
     this.gyro.pitch0 = null;
-    this.gyro.calib = { t0: performance.now(), n: 0, roll: 0, pitch: 0 };
+    this.gyro.calib = { t0: performance.now(), seen: 0, rolls: [], pitches: [] };
   }
 
   _orientation(e) {
-    if (e.beta === null || e.gamma === null) return;
+    if (!Number.isFinite(e.beta) || !Number.isFinite(e.gamma)) return;
     const g = this.gyro;
     g.receiving = true;
     const b = (e.beta * Math.PI) / 180;
@@ -165,15 +169,17 @@ export class Input {
     const cal = g.calib;
     if (cal) {
       const age = performance.now() - cal.t0;
-      if (age < CALIB_SKIP) return;
-      cal.n++;
-      cal.roll += g.roll;
-      cal.pitch += g.pitch;
-      if (age >= CALIB_SKIP + CALIB_TIME && cal.n >= 3) {
-        g.roll0 = Math.max(-ROLL_TRIM_MAX, Math.min(ROLL_TRIM_MAX, cal.roll / cal.n));
-        g.pitch0 = cal.pitch / cal.n;
+      if (age < CALIB_SKIP || ++cal.seen <= 2) return;
+      cal.rolls.push(g.roll);
+      cal.pitches.push(g.pitch);
+      if (age >= CALIB_SKIP + CALIB_TIME && cal.rolls.length >= 4) {
+        // The median shrugs off a stray reading that the mean would not.
+        g.roll0 = Math.max(-ROLL_TRIM_MAX, Math.min(ROLL_TRIM_MAX, median(cal.rolls)));
+        g.pitch0 = median(cal.pitches);
         g.rollF = 0;
         g.pitchF = 0;
+        g.fRoll.reset();
+        g.fPitch.reset();
         g.calib = null;
       }
     } else if (g.pitch0 === null) this.recenter();
@@ -204,13 +210,12 @@ export class Input {
       this.x += (tx - this.x) * (1 - Math.exp(-dt * 5));
       this.y += (ty - this.y) * (1 - Math.exp(-dt * 5));
     } else if (this.usingGyro) {
-      // Low-pass the sensor so hand tremor doesn't reach the plane.
-      const a = 1 - Math.exp(-dt * 10);
-      g.rollF += (g.roll - g.roll0 - g.rollF) * a;
+      // Filter the sensor so hand tremor doesn't reach the plane.
       let dp = g.pitch - g.pitch0;
       if (dp > Math.PI) dp -= 2 * Math.PI;
       if (dp < -Math.PI) dp += 2 * Math.PI;
-      g.pitchF += (dp - g.pitchF) * a;
+      g.rollF = g.fRoll.filter(g.roll - g.roll0, dt);
+      g.pitchF = g.fPitch.filter(dp, dt);
       this.x = curve(g.rollF, ROLL_RANGE);
       this.y = curve(g.pitchF, PITCH_RANGE);
     } else if (this.touch) {
@@ -230,6 +235,12 @@ export class Input {
   }
 }
 
+function median(a) {
+  const s = [...a].sort((x, y) => x - y);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
 // Tilt angle -> stick position: small dead zone, then a gentle expo curve so
 // slight tilts give fine control and bigger ones still reach full deflection.
 function curve(angle, range) {
@@ -247,4 +258,30 @@ function clampDead(v) {
   if (a < dead) return 0;
   const t = Math.min(1, (a - dead) / (1 - dead));
   return Math.sign(v) * (0.45 * t + 0.55 * t * t);
+}
+
+/**
+ * One-euro filter: a low-pass whose cutoff rises with speed, so a phone held
+ * still reads rock-steady while a deliberate tilt comes through without lag.
+ */
+class OneEuro {
+  constructor(minCutoff = 0.5, beta = 1, dCutoff = 1) {
+    this.minCutoff = minCutoff;
+    this.beta = beta;
+    this.dCutoff = dCutoff;
+    this.reset();
+  }
+
+  reset() {
+    this.x = null;
+    this.dx = 0;
+  }
+
+  filter(x, dt) {
+    if (this.x === null || !(dt > 0)) return (this.x = x);
+    const alpha = (cutoff) => 1 / (1 + 1 / (2 * Math.PI * cutoff * dt));
+    this.dx += ((x - this.x) / dt - this.dx) * alpha(this.dCutoff);
+    this.x += (x - this.x) * alpha(this.minCutoff + this.beta * Math.abs(this.dx));
+    return this.x;
+  }
 }
